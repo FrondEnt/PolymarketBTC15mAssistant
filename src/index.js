@@ -183,6 +183,13 @@ function fmtEtTime(now = new Date()) {
   }
 }
 
+function randomBetween(minMs, maxMs) {
+  const min = Number(minMs);
+  const max = Number(maxMs);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return min;
+  return Math.floor(min + Math.random() * (max - min));
+}
+
 function getBtcSession(now = new Date()) {
   const h = now.getUTCHours();
   const inAsia = h >= 0 && h < 8;
@@ -288,7 +295,7 @@ async function resolveCurrentBtc15mMarket() {
   if (!CONFIG.polymarket.autoSelectLatest) return null;
 
   const now = Date.now();
-  if (marketCache.market && now - marketCache.fetchedAtMs < CONFIG.pollIntervalMs) {
+  if (marketCache.market && now - marketCache.fetchedAtMs < CONFIG.marketCacheTtlMs) {
     return marketCache.market;
   }
 
@@ -417,8 +424,16 @@ async function main() {
     "recommendation"
   ];
 
+  const ohlcCache = {
+    klines1m: null,
+    klines5m: null,
+    fetchedAtMs: 0,
+    nextRefreshMs: 0
+  };
+
   while (true) {
     const timing = getCandleWindowTiming(CONFIG.candleWindowMinutes);
+    const nowMs = Date.now();
 
     const polymarketWsTick = polymarketLiveStream.getLast();
     const polymarketWsPrice = polymarketWsTick?.price ?? null;
@@ -433,13 +448,22 @@ async function main() {
           ? Promise.resolve({ price: chainlinkWsPrice, updatedAt: chainlinkWsTick?.updatedAt ?? null, source: "chainlink_ws" })
           : fetchChainlinkBtcUsd();
 
+      const shouldRefreshOhlc = !ohlcCache.klines1m || !ohlcCache.klines5m || nowMs >= ohlcCache.nextRefreshMs;
+
       const [klines1m, klines5m, lastPrice, chainlink, poly] = await Promise.all([
-        fetchKlines({ interval: "1m", limit: 240 }),
-        fetchKlines({ interval: "5m", limit: 200 }),
+        shouldRefreshOhlc ? fetchKlines({ interval: "1m", limit: 240 }) : Promise.resolve(ohlcCache.klines1m),
+        shouldRefreshOhlc ? fetchKlines({ interval: "5m", limit: 200 }) : Promise.resolve(ohlcCache.klines5m),
         fetchLastPrice(),
         chainlinkPromise,
         fetchPolymarketSnapshot()
       ]);
+
+      if (shouldRefreshOhlc && klines1m && klines5m) {
+        ohlcCache.klines1m = klines1m;
+        ohlcCache.klines5m = klines5m;
+        ohlcCache.fetchedAtMs = nowMs;
+        ohlcCache.nextRefreshMs = nowMs + randomBetween(CONFIG.ohlcPollMinMs, CONFIG.ohlcPollMaxMs);
+      }
 
       const settlementMs = poly.ok && poly.market?.endDate ? new Date(poly.market.endDate).getTime() : null;
       const settlementLeftMin = settlementMs ? (settlementMs - Date.now()) / 60_000 : null;
@@ -721,7 +745,7 @@ async function main() {
       console.log("────────────────────────────");
     }
 
-    await sleep(CONFIG.pollIntervalMs);
+    await sleep(randomBetween(CONFIG.tickerPollMinMs, CONFIG.tickerPollMaxMs));
   }
 }
 

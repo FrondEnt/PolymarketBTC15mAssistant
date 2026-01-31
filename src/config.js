@@ -4,7 +4,11 @@ export const CONFIG = {
   gammaBaseUrl: "https://gamma-api.polymarket.com",
   clobBaseUrl: "https://clob.polymarket.com",
 
-  pollIntervalMs: 1_000,
+  tickerPollMinMs: 2_000,
+  tickerPollMaxMs: 5_000,
+  ohlcPollMinMs: 30_000,
+  ohlcPollMaxMs: 60_000,
+  marketCacheTtlMs: 5_000,
   candleWindowMinutes: 15,
 
   vwapSlopeLookbackMinutes: 5,
