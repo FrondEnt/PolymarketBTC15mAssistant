@@ -10,7 +10,6 @@ import {
   Tooltip,
   ReferenceLine,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 import styles from "./Dashboard.module.css";
 import { ApiResponse, ChartPoint } from "./types";
@@ -26,7 +25,7 @@ import { CustomTooltip } from "./CustomTooltip";
 import { MarketHeader } from "./MarketHeader";
 
 // ─── Domain alignment (open ↔ 50% on same Y pixel) ────────────────────────
-function computeDomains(slice: ChartPoint[], btcOpen: number, atr: number | null, atrMultiplier: number, visible: any, padding = 0.18) {
+function computeDomains(slice: ChartPoint[], btcOpen: number, atr: number | null, atrMultiplier: number, visible: any, priceToBeat: number | null, padding = 0.18) {
   if (!slice.length)
     return {
       btcDomain: [0, 1] as [number, number],
@@ -34,25 +33,27 @@ function computeDomains(slice: ChartPoint[], btcOpen: number, atr: number | null
       btcOpen: 0,
     };
 
+  const center = priceToBeat ?? btcOpen;
+
   const btcVals = slice.map((d) => d.btc);
   
   // Include ATR levels in domain calculation if they are visible
-  if (atr !== null) {
-    if (visible.atrPlus) btcVals.push(btcOpen + (atr * atrMultiplier));
-    if (visible.atrMinus) btcVals.push(btcOpen - (atr * atrMultiplier));
+  if (atr !== null && priceToBeat !== null) {
+    if (visible.atrPlus) btcVals.push(priceToBeat + (atr * atrMultiplier));
+    if (visible.atrMinus) btcVals.push(priceToBeat - (atr * atrMultiplier));
   }
 
   const btcMin = Math.min(...btcVals);
   const btcMax = Math.max(...btcVals);
 
-  // To center btcOpen, we find the maximum distance from btcOpen to any point
-  const maxDelta = Math.max(Math.abs(btcMax - btcOpen), Math.abs(btcMin - btcOpen));
+  // Center the Y-domain on priceToBeat (falling back to btcOpen)
+  const maxDelta = Math.max(Math.abs(btcMax - center), Math.abs(btcMin - center));
   
   // Apply padding to the range
   const halfRange = maxDelta * (1 + padding);
   
-  const btcLo = btcOpen - halfRange;
-  const btcHi = btcOpen + halfRange;
+  const btcLo = center - halfRange;
+  const btcHi = center + halfRange;
 
   return {
     btcDomain: [Math.round(btcLo), Math.round(btcHi)] as [number, number],
@@ -75,7 +76,7 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
   const [etTime, setEtTime] = useState("--:--:--");
   const [session, setSession] = useState("--");
   const [atr, setAtr] = useState<number | null>(null);
-  const [atrMultiplier, setAtrMultiplier] = useState(0.1);
+  const [atrMultiplier, setAtrMultiplier] = useState(0.5);
   const [visible, setVisible] = useState({
     btc: true,
     poly: true,
@@ -194,13 +195,16 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
     [chartHistory, view]
   );
   
+  const poly = data?.polymarket;
+  const priceToBeat = poly?.priceToBeat ?? null;
+
   const btcOpenPrice = useMemo(() => {
     return chartHistory.length > 0 ? chartHistory[0].btc : 0;
   }, [chartHistory]);
 
   const { btcDomain, polyDomain, btcOpen } = useMemo(
-    () => computeDomains(slice, btcOpenPrice, atr, atrMultiplier, visible),
-    [slice, btcOpenPrice, atr, atrMultiplier, visible]
+    () => computeDomains(slice, btcOpenPrice, atr, atrMultiplier, visible, priceToBeat),
+    [slice, btcOpenPrice, atr, atrMultiplier, visible, priceToBeat]
   );
 
   const xTicks = useMemo(() => {
@@ -305,7 +309,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
   const resetZoom = () => setView({ lo: 0, hi: N });
   const isZoomed = N > 0 && (view.lo !== 0 || view.hi !== N);
 
-  const poly = data?.polymarket;
   const btcPrice = data?.btcPrice ?? null;
   const timeLeftMin = data?.timeLeftMin ?? null;
 
@@ -320,7 +323,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
       ? "down"
       : null;
 
-  const priceToBeat = poly?.priceToBeat ?? null;
   const ptbDelta =
     btcPrice !== null && priceToBeat !== null ? btcPrice - priceToBeat : null;
 
@@ -421,7 +423,7 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                       strokeWidth={1.5}
                       strokeOpacity={0.8}
                       label={{
-                        value: "price to beat",
+                        // value: "price to beat",
                         position: "insideLeft",
                         fill: "#ffffff",
                         fontSize: 10,
@@ -431,10 +433,10 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                     />
                   )}
 
-                  {visible.atrPlus && atr !== null && (
+                  {visible.atrPlus && atr !== null && priceToBeat !== null && (
                     <ReferenceLine
                       yAxisId="btc"
-                      y={btcOpen + (atr * atrMultiplier)}
+                      y={priceToBeat + (atr * atrMultiplier)}
                       stroke="#f7931a"
                       strokeDasharray="3 3"
                       strokeWidth={1}
@@ -450,10 +452,10 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                     />
                   )}
 
-                  {visible.atrMinus && atr !== null && (
+                  {visible.atrMinus && atr !== null && priceToBeat !== null && (
                     <ReferenceLine
                       yAxisId="btc"
-                      y={btcOpen - (atr * atrMultiplier)}
+                      y={priceToBeat - (atr * atrMultiplier)}
                       stroke="#f7931a"
                       strokeDasharray="3 3"
                       strokeWidth={1}
@@ -507,22 +509,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                     />
                   )}
 
-                  <Legend
-                    wrapperStyle={{
-                      paddingTop: 16,
-                      fontFamily: "JetBrains Mono, monospace",
-                      fontSize: 12,
-                    }}
-                    formatter={(v) => {
-                      if (v === "btc" && visible.btc) {
-                        return <span style={{ color: "#f7931a" }}>BTC/USD (left, $)</span>;
-                      }
-                      if (v === "poly" && visible.poly) {
-                        return <span style={{ color: "#4ade80" }}>Polymarket UP (right, %)</span>;
-                      }
-                      return null;
-                    }}
-                  />
                 </ComposedChart>
               </ResponsiveContainer>
             ) : (
@@ -546,28 +532,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
 
         {/* ── Sidebar ── */}
         <aside className={styles.sidebar}>
-          {/* Market Info Card */}
-          {poly && (
-            <div className={styles.card}>
-              <div className={styles.marketQuestion}>
-                {poly.question || "Loading market..."}
-              </div>
-              <div className={styles.marketMeta}>
-                <div>
-                  <span className={styles.metaLabel}>Market: </span>
-                  <span className={styles.metaValue}>{poly.slug || "-"}</span>
-                </div>
-                <div>
-                  <span className={styles.metaLabel}>Time left: </span>
-                  <span
-                    style={{ color: timeColor(timeLeftMin), fontWeight: 600 }}
-                  >
-                    {fmtTimeLeft(timeLeftMin)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Data Grid */}
           <div className={styles.grid}>
@@ -595,11 +559,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
               <DataRow
                 label="Liquidity"
                 value={poly?.liquidity ? formatNumber(poly.liquidity, 0) : "-"}
-              />
-              <DataRow
-                label="Time left"
-                value={fmtTimeLeft(poly?.timeLeftMin ?? null)}
-                valueColor={timeColor(poly?.timeLeftMin ?? null)}
               />
             </div>
 
@@ -649,27 +608,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
             </div>
           </div>
 
-          {/* Session Info */}
-          <div className={styles.sessionCard}>
-            <div className={styles.sessionGroup}>
-              <div>
-                <span className={styles.sessionLabel}>ET Time: </span>
-                <span className={styles.sessionValue}>{etTime}</span>
-              </div>
-              <div>
-                <span className={styles.sessionLabel}>Session: </span>
-                <span className={styles.sessionValue}>{session}</span>
-              </div>
-              {atr !== null && (
-                <div>
-                  <span className={styles.sessionLabel}>{interval}m ATR: </span>
-                  <span className={styles.sessionValue}>${formatNumber(atr, 2)}</span>
-                </div>
-              )}
-            </div>
-            <div className={styles.pollingInfo}>Polling every 1s</div>
-          </div>
-
           {/* Chart Controls */}
           <div className={styles.card}>
             <div className={styles.cardTitle}>CHART LAYERS</div>
@@ -681,6 +619,9 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                   checked={visible.btc}
                   onChange={() => setVisible(v => ({ ...v, btc: !v.btc }))}
                 />
+                <svg width="24" height="12" className={styles.legendSwatch}>
+                  <line x1="0" y1="6" x2="24" y2="6" stroke="#f7931a" strokeWidth="2" />
+                </svg>
                 <span className={`${styles.toggleLabel} ${visible.btc ? styles.toggleLabelActive : ""}`}>
                   BTC Price
                 </span>
@@ -692,6 +633,9 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                   checked={visible.poly}
                   onChange={() => setVisible(v => ({ ...v, poly: !v.poly }))}
                 />
+                <svg width="24" height="12" className={styles.legendSwatch}>
+                  <line x1="0" y1="6" x2="24" y2="6" stroke="#4ade80" strokeWidth="2" />
+                </svg>
                 <span className={`${styles.toggleLabel} ${visible.poly ? styles.toggleLabelActive : ""}`}>
                   Polymarket %
                 </span>
@@ -703,6 +647,9 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                   checked={visible.open}
                   onChange={() => setVisible(v => ({ ...v, open: !v.open }))}
                 />
+                <svg width="24" height="12" className={styles.legendSwatch}>
+                  <line x1="0" y1="6" x2="24" y2="6" stroke="#ffffff" strokeWidth="1.5" strokeDasharray="5 4" strokeOpacity="0.8" />
+                </svg>
                 <span className={`${styles.toggleLabel} ${visible.open ? styles.toggleLabelActive : ""}`}>
                   Price to Beat
                 </span>
@@ -714,8 +661,11 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                   checked={visible.atrPlus}
                   onChange={() => setVisible(v => ({ ...v, atrPlus: !v.atrPlus }))}
                 />
+                <svg width="24" height="12" className={styles.legendSwatch}>
+                  <line x1="0" y1="6" x2="24" y2="6" stroke="#f7931a" strokeWidth="1" strokeDasharray="3 3" strokeOpacity="0.4" />
+                </svg>
                 <span className={`${styles.toggleLabel} ${visible.atrPlus ? styles.toggleLabelActive : ""}`}>
-                  Open + ATR
+                  PTB + ATR
                 </span>
               </label>
               <label className={styles.toggleItem}>
@@ -725,8 +675,11 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                   checked={visible.atrMinus}
                   onChange={() => setVisible(v => ({ ...v, atrMinus: !v.atrMinus }))}
                 />
+                <svg width="24" height="12" className={styles.legendSwatch}>
+                  <line x1="0" y1="6" x2="24" y2="6" stroke="#f7931a" strokeWidth="1" strokeDasharray="3 3" strokeOpacity="0.4" />
+                </svg>
                 <span className={`${styles.toggleLabel} ${visible.atrMinus ? styles.toggleLabelActive : ""}`}>
-                  Open - ATR
+                  PTB - ATR
                 </span>
               </label>
             </div>
@@ -742,13 +695,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                 onChange={(e) => setAtrMultiplier(parseFloat(e.target.value) || 0)}
               />
             </div>
-          </div>
-
-          {/* Footer Info */}
-          <div className={styles.footer}>
-            <span className={styles.footerLabel}>How it works: </span>
-            BTC Y-domain is recomputed to keep the open price exactly at the center.
-            Polymarket Y-axis is fixed from 0% to 100%.
           </div>
         </aside>
 

@@ -234,6 +234,10 @@
   font-weight: bold;
 }
 
+.legendSwatch {
+  flex-shrink: 0;
+}
+
 .toggleLabel {
   font-size: 12px;
   color: #888;
