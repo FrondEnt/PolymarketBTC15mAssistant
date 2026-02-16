@@ -353,7 +353,7 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
         {/* ── Main Content (Plot) ── */}
         <main className={styles.mainContent}>
           <MarketHeader
-            title={poly?.question || "Bitcoin Up or Down - 15 min"}
+            title={poly?.question?.split(" - ")[0] || "Bitcoin Up or Down"}
             dateStr={`${new Date().toLocaleDateString("en-US", {
               month: "long",
               day: "numeric",
@@ -412,19 +412,21 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                     width={48}
                   />
 
-                  {visible.open && (
+                  {visible.open && priceToBeat !== null && (
                     <ReferenceLine
                       yAxisId="btc"
-                      y={btcOpen}
-                      stroke="#1e1e30"
+                      y={priceToBeat}
+                      stroke="#ffffff"
                       strokeDasharray="5 4"
-                      strokeWidth={1}
+                      strokeWidth={1.5}
+                      strokeOpacity={0.8}
                       label={{
-                        value: "open / 50%",
+                        value: "price to beat",
                         position: "insideLeft",
-                        fill: "#2e2e48",
+                        fill: "#ffffff",
                         fontSize: 10,
                         fontFamily: "JetBrains Mono, monospace",
+                        fontWeight: 600,
                       }}
                     />
                   )}
@@ -702,7 +704,7 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                   onChange={() => setVisible(v => ({ ...v, open: !v.open }))}
                 />
                 <span className={`${styles.toggleLabel} ${visible.open ? styles.toggleLabelActive : ""}`}>
-                  Open Price
+                  Price to Beat
                 </span>
               </label>
               <label className={styles.toggleItem}>
