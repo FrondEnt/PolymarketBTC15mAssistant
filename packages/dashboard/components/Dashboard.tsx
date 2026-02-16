@@ -104,13 +104,16 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
     fromPoly: number;
     toBtc: number;
     toPoly: number;
+    fromIdx: number;
+    toIdx: number;
     startTime: number;
   } | null>(null);
-  const interpolatedRef = useRef<{ btc: number; poly: number } | null>(null);
+  const interpolatedRef = useRef<{ btc: number; poly: number; idx: number } | null>(null);
   const rafRef = useRef<number>(0);
   const [interpolated, setInterpolated] = useState<{
     btc: number;
     poly: number;
+    idx: number;
   } | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -215,8 +218,10 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
       animStateRef.current = {
         fromBtc: from.btc,
         fromPoly: from.poly,
+        fromIdx: from.idx,
         toBtc: to.btc,
         toPoly: to.poly,
+        toIdx: to.idx,
         startTime: performance.now(),
       };
     }
@@ -238,6 +243,7 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
         const val = {
           btc: a.fromBtc + (a.toBtc - a.fromBtc) * e,
           poly: a.fromPoly + (a.toPoly - a.fromPoly) * e,
+          idx: a.fromIdx + (a.toIdx - a.fromIdx) * e,
         };
         interpolatedRef.current = val;
         setInterpolated(val);
@@ -271,9 +277,9 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
   );
 
   const xTicks = useMemo(() => {
-    if (slice.length <= 10) return slice.map((d) => d.time);
+    if (slice.length <= 10) return slice.map((d) => d.idx);
     const step = Math.max(1, Math.floor(slice.length / 8));
-    return slice.filter((_, i) => i % step === 0).map((d) => d.time);
+    return slice.filter((_, i) => i % step === 0).map((d) => d.idx);
   }, [slice]);
 
   // ── Smoothed slice: replaces the last point with its interpolated value ──
@@ -285,9 +291,17 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
       ...out[out.length - 1],
       btc: interpolated.btc,
       poly: interpolated.poly,
+      idx: interpolated.idx,
     };
     return out;
   }, [slice, interpolated, view.hi, chartHistory.length]);
+
+  const xDomain = useMemo(() => {
+    if (!displaySlice.length) return [0, 0];
+    const first = displaySlice[0].idx;
+    const last = displaySlice[displaySlice.length - 1].idx;
+    return [first, last];
+  }, [displaySlice]);
 
   const tickStyle = {
     fill: "#555",
@@ -461,9 +475,26 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                   <CartesianGrid stroke="#141420" vertical={false} />
 
                   <XAxis
-                    dataKey="time"
+                    dataKey="idx"
+                    type="number"
+                    domain={xDomain}
                     ticks={xTicks}
-                    tick={tickStyle}
+                    tick={(props: any) => {
+                      const { x, y, payload } = props;
+                      const point = slice.find((d) => Math.abs(d.idx - payload.value) < 0.1);
+                      return (
+                        <text
+                          x={x}
+                          y={y + 12}
+                          fill={tickStyle.fill}
+                          fontSize={tickStyle.fontSize}
+                          fontFamily={tickStyle.fontFamily}
+                          textAnchor="middle"
+                        >
+                          {point ? point.time : ""}
+                        </text>
+                      );
+                    }}
                     axisLine={{ stroke: "#1e1e2e" }}
                     tickLine={false}
                   />

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BTC 15m Polymarket Dashboard",
+  title: "BTC Polymarket Dashboard",
   description: "Real-time BTC price and Polymarket prediction tracking",
 };
 
