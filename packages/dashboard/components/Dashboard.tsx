@@ -62,7 +62,11 @@ function computeDomains(slice: ChartPoint[], btcOpen: number, atr: number | null
 
 const MIN_VISIBLE = 6;
 
-export default function Dashboard() {
+interface DashboardProps {
+  interval?: number;
+}
+
+export default function Dashboard({ interval = 15 }: DashboardProps) {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [prevBtcPrice, setPrevBtcPrice] = useState<number | null>(null);
   const [chartHistory, setChartHistory] = useState<ChartPoint[]>([]);
@@ -92,7 +96,7 @@ export default function Dashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch("/api/data");
+      const res = await fetch(`/api/btc/${interval}/data`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: ApiResponse = await res.json();
       setData((prev) => {
@@ -165,7 +169,7 @@ export default function Dashboard() {
     } catch (err) {
       setError(String(err));
     }
-  }, []);
+  }, [interval]);
 
   useEffect(() => {
     fetchData();
@@ -339,7 +343,7 @@ export default function Dashboard() {
                 ⟳ reset
               </button>
             )}
-            <span className={styles.timeInfo}>15m · today</span>
+            <span className={styles.timeInfo}>{interval}m · today</span>
           </div>
         </div>
       </header>
@@ -643,7 +647,7 @@ export default function Dashboard() {
               </div>
               {atr !== null && (
                 <div>
-                  <span className={styles.sessionLabel}>15m ATR: </span>
+                  <span className={styles.sessionLabel}>{interval}m ATR: </span>
                   <span className={styles.sessionValue}>${formatNumber(atr, 2)}</span>
                 </div>
               )}
