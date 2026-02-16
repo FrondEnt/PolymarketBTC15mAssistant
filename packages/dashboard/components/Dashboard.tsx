@@ -532,84 +532,80 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
 
         {/* ── Sidebar ── */}
         <aside className={styles.sidebar}>
-
-          {/* Data Grid */}
-          <div className={styles.grid}>
-            {/* Polymarket Card */}
-            <div className={styles.card}>
-              <div className={styles.cardTitle}>POLYMARKET</div>
-              <div className={styles.statGroup}>
-                <div>
-                  <div className={styles.statLabel}>UP</div>
-                  <div className={styles.statValue} style={{ color: "#4ade80" }}>
-                    {poly?.upPrice !== null && poly?.upPrice !== undefined
-                      ? `${(poly.upPrice * 100).toFixed(1)}c`
-                      : "-"}
-                  </div>
-                </div>
-                <div>
-                  <div className={styles.statLabel}>DOWN</div>
-                  <div className={styles.statValue} style={{ color: "#f87171" }}>
-                    {poly?.downPrice !== null && poly?.downPrice !== undefined
-                      ? `${(poly.downPrice * 100).toFixed(1)}c`
-                      : "-"}
-                  </div>
+          {/* Polymarket Section */}
+          <div className={styles.section}>
+            <div className={styles.cardTitle}>POLYMARKET</div>
+            <div className={styles.statGroup}>
+              <div>
+                <div className={styles.statLabel}>UP</div>
+                <div className={styles.statValue} style={{ color: "#4ade80" }}>
+                  {poly?.upPrice !== null && poly?.upPrice !== undefined
+                    ? `${(poly.upPrice * 100).toFixed(1)}c`
+                    : "-"}
                 </div>
               </div>
-              <DataRow
-                label="Liquidity"
-                value={poly?.liquidity ? formatNumber(poly.liquidity, 0) : "-"}
-              />
-            </div>
-
-            {/* Prices Card */}
-            <div className={styles.card}>
-              <div className={styles.cardTitle}>PRICES</div>
-              <div style={{ marginBottom: 12 }}>
-                <div className={styles.btcLabel}>BTC (Binance)</div>
-                <div className={styles.btcValueContainer}>
-                  <span
-                    style={{
-                      fontSize: 22,
-                      fontWeight: 700,
-                      color:
-                        btcPriceDirection === "up"
-                          ? "#4ade80"
-                          : btcPriceDirection === "down"
-                          ? "#f87171"
-                          : "#fff",
-                    }}
-                  >
-                    ${formatNumber(btcPrice, 2)}
-                    {btcPriceDirection === "up" && " ↑"}
-                    {btcPriceDirection === "down" && " ↓"}
-                  </span>
+              <div>
+                <div className={styles.statLabel}>DOWN</div>
+                <div className={styles.statValue} style={{ color: "#f87171" }}>
+                  {poly?.downPrice !== null && poly?.downPrice !== undefined
+                    ? `${(poly.downPrice * 100).toFixed(1)}c`
+                    : "-"}
                 </div>
               </div>
-              <DataRow
-                label="Price to Beat"
-                value={priceToBeat !== null ? `$${formatNumber(priceToBeat, 2)}` : "-"}
-              />
-              <DataRow
-                label="Delta"
-                value={
-                  ptbDelta !== null ? `${ptbDelta > 0 ? "+" : ""}$${ptbDelta.toFixed(2)}` : "-"
-                }
-                valueColor={
-                  ptbDelta === null
-                    ? "#50506a"
-                    : ptbDelta > 0
-                    ? "#4ade80"
-                    : ptbDelta < 0
-                    ? "#f87171"
-                    : "#50506a"
-                }
-              />
             </div>
+            <DataRow
+              label="Liquidity"
+              value={poly?.liquidity ? formatNumber(poly.liquidity, 0) : "-"}
+            />
           </div>
 
-          {/* Chart Controls */}
-          <div className={styles.card}>
+          {/* Prices Section */}
+          <div className={styles.section}>
+            <div className={styles.cardTitle}>PRICES</div>
+            <div style={{ marginBottom: 12 }}>
+              <div className={styles.btcLabel}>BTC (Binance)</div>
+              <div className={styles.btcValueContainer}>
+                <span
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 700,
+                    color:
+                      btcPriceDirection === "up"
+                        ? "#4ade80"
+                        : btcPriceDirection === "down"
+                        ? "#f87171"
+                        : "#fff",
+                  }}
+                >
+                  ${formatNumber(btcPrice, 2)}
+                  {btcPriceDirection === "up" && " ↑"}
+                  {btcPriceDirection === "down" && " ↓"}
+                </span>
+              </div>
+            </div>
+            <DataRow
+              label="Price to Beat"
+              value={priceToBeat !== null ? `$${formatNumber(priceToBeat, 2)}` : "-"}
+            />
+            <DataRow
+              label="Delta"
+              value={
+                ptbDelta !== null ? `${ptbDelta > 0 ? "+" : ""}$${ptbDelta.toFixed(2)}` : "-"
+              }
+              valueColor={
+                ptbDelta === null
+                  ? "#50506a"
+                  : ptbDelta > 0
+                  ? "#4ade80"
+                  : ptbDelta < 0
+                  ? "#f87171"
+                  : "#50506a"
+              }
+            />
+          </div>
+
+          {/* Chart Controls Section */}
+          <div className={styles.section}>
             <div className={styles.cardTitle}>CHART LAYERS</div>
             <div className={styles.toggleGroup}>
               <label className={styles.toggleItem}>

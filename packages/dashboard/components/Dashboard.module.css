@@ -29,9 +29,17 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 16px;
   background: #0d0d16;
   flex-shrink: 0;
+}
+
+.section {
+  padding: 24px 16px;
+  border-bottom: 1px solid #161622;
+}
+
+.section:last-child {
+  border-bottom: none;
 }
 
 .header {
