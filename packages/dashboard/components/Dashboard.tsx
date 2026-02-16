@@ -12,93 +12,26 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-
-interface PolymarketData {
-  question: string | null;
-  slug: string | null;
-  endDate: string | null;
-  eventStartTime: string | null;
-  upPrice: number | null;
-  downPrice: number | null;
-  liquidity: number | null;
-  priceToBeat: number | null;
-  timeLeftMin: number | null;
-}
-
-interface HistoryPoint {
-  timeMs: number;
-  btc: number;
-  poly: number | null;
-}
-
-interface ApiResponse {
-  timestamp: string;
-  btcPrice: number | null;
-  polymarket: PolymarketData;
-  timeLeftMin: number | null;
-  history: HistoryPoint[];
-}
-
-interface ChartPoint {
-  time: string;
-  btc: number;
-  poly: number;
-  idx: number;
-}
-
-function formatNumber(x: number | null | undefined, digits = 0): string {
-  if (x === null || x === undefined || Number.isNaN(x)) return "-";
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(x);
-}
-
-function fmtTimeLeft(mins: number | null): string {
-  if (mins === null || mins === undefined) return "--:--";
-  const totalSeconds = Math.max(0, Math.floor(mins * 60));
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-function timeColor(mins: number | null): string {
-  if (mins === null) return "#50506a";
-  if (mins >= 10) return "#4ade80";
-  if (mins >= 5) return "#facc15";
-  return "#f87171";
-}
-
-function getBtcSession(): string {
-  const h = new Date().getUTCHours();
-  const inAsia = h >= 0 && h < 8;
-  const inEurope = h >= 7 && h < 16;
-  const inUs = h >= 13 && h < 22;
-  if (inEurope && inUs) return "Europe/US overlap";
-  if (inAsia && inEurope) return "Asia/Europe overlap";
-  if (inAsia) return "Asia";
-  if (inEurope) return "Europe";
-  if (inUs) return "US";
-  return "Off-hours";
-}
-
-function getEtTime(): string {
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/New_York",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).format(new Date());
-  } catch {
-    return "-";
-  }
-}
+import styles from "./Dashboard.module.css";
+import { ApiResponse, ChartPoint } from "./types";
+import {
+  formatNumber,
+  fmtTimeLeft,
+  timeColor,
+  getBtcSession,
+  getEtTime,
+} from "./utils";
+import { DataRow } from "./DataRow";
+import { CustomTooltip } from "./CustomTooltip";
 
 // ─── Domain alignment (open ↔ 50% on same Y pixel) ────────────────────────
 function computeDomains(slice: ChartPoint[], padding = 0.18) {
-  if (!slice.length) return { btcDomain: [0, 1] as [number, number], polyDomain: [0, 1] as [number, number], btcOpen: 0 };
+  if (!slice.length)
+    return {
+      btcDomain: [0, 1] as [number, number],
+      polyDomain: [0, 1] as [number, number],
+      btcOpen: 0,
+    };
 
   const btcOpen = slice[0].btc;
   const polyAnchor = 0.5;
@@ -123,44 +56,13 @@ function computeDomains(slice: ChartPoint[], padding = 0.18) {
 
   return {
     btcDomain: [Math.round(btcLo), Math.round(btcHi)] as [number, number],
-    polyDomain: [Math.min(polyLoAligned, polyMin - polyRange * padding), polyHi] as [number, number],
+    polyDomain: [
+      Math.min(polyLoAligned, polyMin - polyRange * padding),
+      polyHi,
+    ] as [number, number],
     btcOpen,
   };
 }
-
-// ─── Tooltip ───────────────────────────────────────────────────────────────
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  const btc = payload.find((p: any) => p.dataKey === "btc");
-  const poly = payload.find((p: any) => p.dataKey === "poly");
-  return (
-    <div
-      style={{
-        background: "#0f0f14",
-        border: "1px solid #2a2a3a",
-        borderRadius: 8,
-        padding: "10px 14px",
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: 12,
-        lineHeight: 1.8,
-        boxShadow: "0 8px 32px rgba(0,0,0,.6)",
-        pointerEvents: "none",
-      }}
-    >
-      <div style={{ color: "#888", marginBottom: 4 }}>{label}</div>
-      {btc && (
-        <div style={{ color: "#f7931a" }}>
-          BTC <span style={{ color: "#fff" }}>${btc.value?.toLocaleString()}</span>
-        </div>
-      )}
-      {poly && (
-        <div style={{ color: "#4ade80" }}>
-          UP <span style={{ color: "#fff" }}>{(poly.value * 100).toFixed(1)}%</span>
-        </div>
-      )}
-    </div>
-  );
-};
 
 const MIN_VISIBLE = 6;
 
@@ -176,7 +78,11 @@ export default function Dashboard() {
   // ── Zoom/Pan State ──
   const [view, setView] = useState({ lo: 0, hi: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const dragRef = useRef<{ startX: number; startLo: number; startHi: number } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startLo: number;
+    startHi: number;
+  } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(async () => {
@@ -207,7 +113,11 @@ export default function Dashboard() {
           }
           prevMarketSlug.current = currentSlug;
 
-          if (baseHistory.length === 0 && json.history && json.history.length > 0) {
+          if (
+            baseHistory.length === 0 &&
+            json.history &&
+            json.history.length > 0
+          ) {
             baseHistory = json.history
               .filter((h) => h.poly !== null)
               .map((h, i) => ({
@@ -232,15 +142,15 @@ export default function Dashboard() {
 
           const updated = [...baseHistory, newPoint];
           const final = updated.length > 500 ? updated.slice(-500) : updated;
-          
+
           // Reset view if it was at the end or uninitialized
-          setView(v => {
+          setView((v) => {
             if (v.hi === 0 || v.hi === baseHistory.length) {
               return { lo: 0, hi: final.length };
             }
             return v;
           });
-          
+
           return final;
         });
       }
@@ -268,8 +178,14 @@ export default function Dashboard() {
   }, []);
 
   const N = chartHistory.length;
-  const slice = useMemo(() => chartHistory.slice(view.lo, view.hi), [chartHistory, view]);
-  const { btcDomain, polyDomain, btcOpen } = useMemo(() => computeDomains(slice), [slice]);
+  const slice = useMemo(
+    () => chartHistory.slice(view.lo, view.hi),
+    [chartHistory, view]
+  );
+  const { btcDomain, polyDomain, btcOpen } = useMemo(
+    () => computeDomains(slice),
+    [slice]
+  );
 
   const xTicks = useMemo(() => {
     if (slice.length <= 10) return slice.map((d) => d.time);
@@ -277,7 +193,11 @@ export default function Dashboard() {
     return slice.filter((_, i) => i % step === 0).map((d) => d.time);
   }, [slice]);
 
-  const tickStyle = { fill: "#555", fontSize: 11, fontFamily: "JetBrains Mono, monospace" };
+  const tickStyle = {
+    fill: "#555",
+    fontSize: 11,
+    fontFamily: "JetBrains Mono, monospace",
+  };
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const chartWidth = () => (wrapRef.current?.clientWidth ?? 800) - 128;
@@ -300,7 +220,7 @@ export default function Dashboard() {
       dragRef.current = { startX: e.clientX, startLo: view.lo, startHi: view.hi };
       setIsDragging(true);
     },
-    [view],
+    [view]
   );
 
   const onMouseMove = useCallback(
@@ -311,9 +231,14 @@ export default function Dashboard() {
         hi: dragRef.current.startHi,
       });
       const size = dragRef.current.startHi - dragRef.current.startLo;
-      setView(clamp(dragRef.current.startLo + delta, dragRef.current.startLo + delta + size));
+      setView(
+        clamp(
+          dragRef.current.startLo + delta,
+          dragRef.current.startLo + delta + size
+        )
+      );
     },
-    [N],
+    [N]
   );
 
   const onMouseUp = useCallback(() => {
@@ -332,14 +257,16 @@ export default function Dashboard() {
         newVisible = Math.max(MIN_VISIBLE, Math.min(N, newVisible));
 
         const rect = wrapRef.current?.getBoundingClientRect();
-        const cursorFrac = rect ? Math.max(0, Math.min(1, (e.clientX - rect.left - 64) / chartWidth())) : 0.5;
+        const cursorFrac = rect
+          ? Math.max(0, Math.min(1, (e.clientX - rect.left - 64) / chartWidth()))
+          : 0.5;
 
         const anchorIdx = prev.lo + Math.round(cursorFrac * visible);
         const newLo = Math.round(anchorIdx - cursorFrac * newVisible);
         return clamp(newLo, newLo + newVisible);
       });
     },
-    [N],
+    [N]
   );
 
   useEffect(() => {
@@ -366,93 +293,69 @@ export default function Dashboard() {
   const btcPrice = data?.btcPrice ?? null;
   const timeLeftMin = data?.timeLeftMin ?? null;
 
-  const btcPriceDelta = btcPrice !== null && prevBtcPrice !== null ? btcPrice - prevBtcPrice : null;
-  const btcPriceDirection = btcPriceDelta === null ? null : btcPriceDelta > 0 ? "up" : btcPriceDelta < 0 ? "down" : null;
+  const btcPriceDelta =
+    btcPrice !== null && prevBtcPrice !== null ? btcPrice - prevBtcPrice : null;
+  const btcPriceDirection =
+    btcPriceDelta === null
+      ? null
+      : btcPriceDelta > 0
+      ? "up"
+      : btcPriceDelta < 0
+      ? "down"
+      : null;
 
   const priceToBeat = poly?.priceToBeat ?? null;
-  const ptbDelta = btcPrice !== null && priceToBeat !== null ? btcPrice - priceToBeat : null;
+  const ptbDelta =
+    btcPrice !== null && priceToBeat !== null ? btcPrice - priceToBeat : null;
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#0a0a10",
-        padding: "24px 16px",
-        fontFamily: "'JetBrains Mono', monospace",
-        color: "#fff",
-      }}
-    >
+    <div className={styles.container}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');`}</style>
 
-      <div style={{ maxWidth: 860, margin: "0 auto" }}>
+      <div className={styles.inner}>
         {/* ── Header ── */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-            <span style={{ color: "#f7931a", fontSize: 22, fontWeight: 700, letterSpacing: -0.5 }}>BTC/USD</span>
-            <span style={{ color: "#4ade80", fontSize: 18, fontWeight: 600 }}>× Polymarket UP</span>
+        <div className={styles.header}>
+          <div className={styles.headerTop}>
+            <span className={styles.btcTitle}>BTC/USD</span>
+            <span className={styles.polyTitle}>× Polymarket UP</span>
 
             {/* candle counter */}
-            <span
-              style={{
-                fontSize: 10,
-                color: "#444",
-                background: "#111",
-                border: "1px solid #1e1e2e",
-                borderRadius: 4,
-                padding: "2px 8px",
-              }}
-            >
+            <span className={styles.pointCounter}>
               {view.hi - view.lo} / {N} points
             </span>
 
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+            <div className={styles.headerRight}>
               {isZoomed && (
-                <button
-                  onClick={resetZoom}
-                  style={{
-                    background: "none",
-                    border: "1px solid #2a2a3a",
-                    borderRadius: 4,
-                    color: "#555",
-                    fontFamily: "inherit",
-                    fontSize: 11,
-                    padding: "3px 10px",
-                    cursor: "pointer",
-                  }}
-                >
+                <button onClick={resetZoom} className={styles.resetButton}>
                   ⟳ reset
                 </button>
               )}
-              <span style={{ color: "#2a2a3a", fontSize: 12 }}>15m · today</span>
+              <span className={styles.timeInfo}>15m · today</span>
             </div>
           </div>
-          <div style={{ color: "#252535", fontSize: 10, letterSpacing: 1.5 }}>
+          <div className={styles.headerSub}>
             SCROLL TO ZOOM · DRAG TO PAN · OPEN ↔ 50% ANCHORED
           </div>
         </div>
 
         {/* Market Info Card */}
         {poly && (
-          <div
-            style={{
-              background: "#0d0d16",
-              border: "1px solid #161622",
-              borderRadius: 8,
-              padding: "16px 20px",
-              marginBottom: 16,
-            }}
-          >
-            <div style={{ fontSize: 14, color: "#fff", fontWeight: 600, marginBottom: 8 }}>
+          <div className={styles.card}>
+            <div className={styles.marketQuestion}>
               {poly.question || "Loading market..."}
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 32px", fontSize: 12 }}>
+            <div className={styles.marketMeta}>
               <div>
-                <span style={{ color: "#50506a" }}>Market: </span>
-                <span style={{ color: "#888" }}>{poly.slug || "-"}</span>
+                <span className={styles.metaLabel}>Market: </span>
+                <span className={styles.metaValue}>{poly.slug || "-"}</span>
               </div>
               <div>
-                <span style={{ color: "#50506a" }}>Time left: </span>
-                <span style={{ color: timeColor(timeLeftMin), fontWeight: 600 }}>{fmtTimeLeft(timeLeftMin)}</span>
+                <span className={styles.metaLabel}>Time left: </span>
+                <span
+                  style={{ color: timeColor(timeLeftMin), fontWeight: 600 }}
+                >
+                  {fmtTimeLeft(timeLeftMin)}
+                </span>
               </div>
             </div>
           </div>
@@ -461,17 +364,9 @@ export default function Dashboard() {
         {/* ── Chart ── */}
         <div
           ref={wrapRef}
-          style={{
-            width: "100%",
-            background: "#0d0d16",
-            border: "1px solid #161622",
-            borderRadius: 8,
-            padding: "20px 8px 12px",
-            marginBottom: 6,
-            cursor: isDragging ? "grabbing" : "crosshair",
-            userSelect: "none",
-            position: "relative",
-          }}
+          className={`${styles.chartWrapper} ${
+            isDragging ? styles.chartDragging : styles.chartNormal
+          }`}
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
@@ -479,7 +374,10 @@ export default function Dashboard() {
         >
           {chartHistory.length > 1 ? (
             <ResponsiveContainer width="100%" height={420}>
-              <ComposedChart data={slice} margin={{ top: 16, right: 64, left: 64, bottom: 8 }}>
+              <ComposedChart
+                data={slice}
+                margin={{ top: 16, right: 64, left: 64, bottom: 8 }}
+              >
                 <CartesianGrid stroke="#141420" vertical={false} />
 
                 <XAxis
@@ -538,7 +436,12 @@ export default function Dashboard() {
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}
-                  activeDot={{ r: 4, fill: "#f7931a", stroke: "#0a0a10", strokeWidth: 2 }}
+                  activeDot={{
+                    r: 4,
+                    fill: "#f7931a",
+                    stroke: "#0a0a10",
+                    strokeWidth: 2,
+                  }}
                 />
 
                 <Line
@@ -549,55 +452,46 @@ export default function Dashboard() {
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}
-                  activeDot={{ r: 4, fill: "#4ade80", stroke: "#0a0a10", strokeWidth: 2 }}
+                  activeDot={{
+                    r: 4,
+                    fill: "#4ade80",
+                    stroke: "#0a0a10",
+                    strokeWidth: 2,
+                  }}
                 />
 
                 <Legend
-                  wrapperStyle={{ paddingTop: 16, fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}
+                  wrapperStyle={{
+                    paddingTop: 16,
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 12,
+                  }}
                   formatter={(v) =>
                     v === "btc" ? (
-                      <span style={{ color: "#f7931a" }}>BTC/USD (left, $)</span>
+                      <span style={{ color: "#f7931a" }}>
+                        BTC/USD (left, $)
+                      </span>
                     ) : (
-                      <span style={{ color: "#4ade80" }}>Polymarket UP (right, %)</span>
+                      <span style={{ color: "#4ade80" }}>
+                        Polymarket UP (right, %)
+                      </span>
                     )
                   }
                 />
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
-            <div
-              style={{
-                height: 420,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#50506a",
-                fontSize: 14,
-              }}
-            >
+            <div className={styles.noData}>
               Collecting data points for chart...
             </div>
           )}
         </div>
 
         {/* ── Mini scrollbar ── */}
-        <div
-          style={{
-            width: "100%",
-            marginBottom: 16,
-            position: "relative",
-            height: 3,
-            borderRadius: 2,
-            background: "#111",
-          }}
-        >
+        <div className={styles.scrollbar}>
           <div
+            className={styles.scrollbarThumb}
             style={{
-              position: "absolute",
-              top: 0,
-              height: "100%",
-              borderRadius: 2,
-              background: "#2a2a40",
               left: `${(view.lo / Math.max(1, N)) * 100}%`,
               width: `${((view.hi - view.lo) / Math.max(1, N)) * 100}%`,
               transition: isDragging ? "none" : "left .08s, width .08s",
@@ -606,34 +500,32 @@ export default function Dashboard() {
         </div>
 
         {/* Data Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div className={styles.grid}>
           {/* Polymarket Card */}
-          <div
-            style={{
-              background: "#0d0d16",
-              border: "1px solid #161622",
-              borderRadius: 8,
-              padding: "16px 20px",
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 12 }}>POLYMARKET</div>
-            <div style={{ display: "flex", gap: 24, marginBottom: 12 }}>
+          <div className={styles.card}>
+            <div className={styles.cardTitle}>POLYMARKET</div>
+            <div className={styles.statGroup}>
               <div>
-                <div style={{ fontSize: 11, color: "#50506a", marginBottom: 2 }}>UP</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: "#4ade80" }}>
-                  {poly?.upPrice !== null && poly?.upPrice !== undefined ? `${(poly.upPrice * 100).toFixed(1)}c` : "-"}
+                <div className={styles.statLabel}>UP</div>
+                <div className={styles.statValue} style={{ color: "#4ade80" }}>
+                  {poly?.upPrice !== null && poly?.upPrice !== undefined
+                    ? `${(poly.upPrice * 100).toFixed(1)}c`
+                    : "-"}
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: 11, color: "#50506a", marginBottom: 2 }}>DOWN</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: "#f87171" }}>
+                <div className={styles.statLabel}>DOWN</div>
+                <div className={styles.statValue} style={{ color: "#f87171" }}>
                   {poly?.downPrice !== null && poly?.downPrice !== undefined
                     ? `${(poly.downPrice * 100).toFixed(1)}c`
                     : "-"}
                 </div>
               </div>
             </div>
-            <DataRow label="Liquidity" value={poly?.liquidity ? formatNumber(poly.liquidity, 0) : "-"} />
+            <DataRow
+              label="Liquidity"
+              value={poly?.liquidity ? formatNumber(poly.liquidity, 0) : "-"}
+            />
             <DataRow
               label="Time left"
               value={fmtTimeLeft(poly?.timeLeftMin ?? null)}
@@ -642,24 +534,21 @@ export default function Dashboard() {
           </div>
 
           {/* Prices Card */}
-          <div
-            style={{
-              background: "#0d0d16",
-              border: "1px solid #161622",
-              borderRadius: 8,
-              padding: "16px 20px",
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 12 }}>PRICES</div>
+          <div className={styles.card}>
+            <div className={styles.cardTitle}>PRICES</div>
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "#50506a", marginBottom: 2 }}>BTC (Binance)</div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <div className={styles.btcLabel}>BTC (Binance)</div>
+              <div className={styles.btcValueContainer}>
                 <span
                   style={{
                     fontSize: 22,
                     fontWeight: 700,
                     color:
-                      btcPriceDirection === "up" ? "#4ade80" : btcPriceDirection === "down" ? "#f87171" : "#fff",
+                      btcPriceDirection === "up"
+                        ? "#4ade80"
+                        : btcPriceDirection === "down"
+                        ? "#f87171"
+                        : "#fff",
                   }}
                 >
                   ${formatNumber(btcPrice, 2)}
@@ -668,88 +557,56 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            <DataRow label="Price to Beat" value={priceToBeat !== null ? `$${formatNumber(priceToBeat, 2)}` : "-"} />
+            <DataRow
+              label="Price to Beat"
+              value={priceToBeat !== null ? `$${formatNumber(priceToBeat, 2)}` : "-"}
+            />
             <DataRow
               label="Delta"
-              value={ptbDelta !== null ? `${ptbDelta > 0 ? "+" : ""}$${ptbDelta.toFixed(2)}` : "-"}
-              valueColor={ptbDelta === null ? "#50506a" : ptbDelta > 0 ? "#4ade80" : ptbDelta < 0 ? "#f87171" : "#50506a"}
+              value={
+                ptbDelta !== null ? `${ptbDelta > 0 ? "+" : ""}$${ptbDelta.toFixed(2)}` : "-"
+              }
+              valueColor={
+                ptbDelta === null
+                  ? "#50506a"
+                  : ptbDelta > 0
+                  ? "#4ade80"
+                  : ptbDelta < 0
+                  ? "#f87171"
+                  : "#50506a"
+              }
             />
           </div>
         </div>
 
         {/* Session Info */}
-        <div
-          style={{
-            background: "#0d0d16",
-            border: "1px solid #161622",
-            borderRadius: 8,
-            padding: "12px 20px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ display: "flex", gap: 24 }}>
+        <div className={styles.sessionCard}>
+          <div className={styles.sessionGroup}>
             <div>
-              <span style={{ color: "#50506a", fontSize: 11 }}>ET Time: </span>
-              <span style={{ color: "#fff", fontWeight: 600 }}>{etTime}</span>
+              <span className={styles.sessionLabel}>ET Time: </span>
+              <span className={styles.sessionValue}>{etTime}</span>
             </div>
             <div>
-              <span style={{ color: "#50506a", fontSize: 11 }}>Session: </span>
-              <span style={{ color: "#fff", fontWeight: 600 }}>{session}</span>
+              <span className={styles.sessionLabel}>Session: </span>
+              <span className={styles.sessionValue}>{session}</span>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: "#50506a" }}>Polling every 1s</div>
+          <div className={styles.pollingInfo}>Polling every 1s</div>
         </div>
 
         {/* ── Footer ── */}
-        <div
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            background: "#0d0d16",
-            border: "1px solid #161622",
-            borderRadius: 8,
-            fontSize: 11,
-            color: "#383848",
-            lineHeight: 1.9,
-          }}
-        >
-          <span style={{ color: "#50506a" }}>How it works: </span>
-          both Y-domains are recomputed on every pan/zoom so BTC open and Polymarket 50% stay on the same horizontal
-          line at all zoom levels.
-          <span style={{ color: "#2a2a3a" }}> · isAnimationActive=false keeps panning smooth.</span>
+        <div className={styles.footer}>
+          <span className={styles.footerLabel}>How it works: </span>
+          both Y-domains are recomputed on every pan/zoom so BTC open and
+          Polymarket 50% stay on the same horizontal line at all zoom levels.
+          <span className={styles.footerSub}>
+            {" "}
+            · isAnimationActive=false keeps panning smooth.
+          </span>
         </div>
 
-        {error && (
-          <div
-            style={{
-              position: "fixed",
-              bottom: 16,
-              right: 16,
-              background: "#1a0a0a",
-              border: "1px solid #3a1a1a",
-              borderRadius: 8,
-              padding: "10px 16px",
-              fontSize: 12,
-              color: "#f87171",
-              maxWidth: 400,
-            }}
-          >
-            Error: {error}
-          </div>
-        )}
+        {error && <div className={styles.errorToast}>Error: {error}</div>}
       </div>
-    </div>
-  );
-}
-
-function DataRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12 }}>
-      <span style={{ color: "#50506a" }}>{label}</span>
-      <span style={{ color: valueColor || "#888", fontWeight: 500 }}>{value}</span>
     </div>
   );
 }
