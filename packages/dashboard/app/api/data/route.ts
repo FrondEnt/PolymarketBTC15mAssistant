@@ -254,7 +254,7 @@ export async function GET() {
       p: item.p,
     }));
 
-    const SAMPLE_INTERVAL_MS = 5000;
+    const SAMPLE_INTERVAL_MS = 1000;
     const history: Array<{ timeMs: number; btc: number; poly: number | null }> = [];
     let nextSampleTime = windowStartMs;
 
