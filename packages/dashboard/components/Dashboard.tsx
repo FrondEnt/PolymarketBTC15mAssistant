@@ -25,7 +25,7 @@ import { DataRow } from "./DataRow";
 import { CustomTooltip } from "./CustomTooltip";
 
 // ─── Domain alignment (open ↔ 50% on same Y pixel) ────────────────────────
-function computeDomains(slice: ChartPoint[], padding = 0.18) {
+function computeDomains(slice: ChartPoint[], btcOpen: number, atr: number | null, atrMultiplier: number, visible: any, padding = 0.18) {
   if (!slice.length)
     return {
       btcDomain: [0, 1] as [number, number],
@@ -33,33 +33,29 @@ function computeDomains(slice: ChartPoint[], padding = 0.18) {
       btcOpen: 0,
     };
 
-  const btcOpen = slice[0].btc;
-  const polyAnchor = 0.5;
-
   const btcVals = slice.map((d) => d.btc);
-  const polyVals = slice.map((d) => d.poly);
+  
+  // Include ATR levels in domain calculation if they are visible
+  if (atr !== null) {
+    if (visible.atrPlus) btcVals.push(btcOpen + (atr * atrMultiplier));
+    if (visible.atrMinus) btcVals.push(btcOpen - (atr * atrMultiplier));
+  }
 
   const btcMin = Math.min(...btcVals);
   const btcMax = Math.max(...btcVals);
-  const polyMin = Math.min(...polyVals);
-  const polyMax = Math.max(...polyVals);
 
-  const btcRange = Math.max(btcMax - btcMin, 1);
-  const polyRange = Math.max(polyMax - polyMin, 0.001);
-
-  const btcLo = btcMin - btcRange * padding;
-  const btcHi = btcMax + btcRange * padding;
-  const polyHi = polyMax + polyRange * padding;
-
-  const btcFrac = (btcOpen - btcLo) / (btcHi - btcLo);
-  const polyLoAligned = (polyAnchor - btcFrac * polyHi) / (1 - btcFrac);
+  // To center btcOpen, we find the maximum distance from btcOpen to any point
+  const maxDelta = Math.max(Math.abs(btcMax - btcOpen), Math.abs(btcMin - btcOpen));
+  
+  // Apply padding to the range
+  const halfRange = maxDelta * (1 + padding);
+  
+  const btcLo = btcOpen - halfRange;
+  const btcHi = btcOpen + halfRange;
 
   return {
     btcDomain: [Math.round(btcLo), Math.round(btcHi)] as [number, number],
-    polyDomain: [
-      Math.min(polyLoAligned, polyMin - polyRange * padding),
-      polyHi,
-    ] as [number, number],
+    polyDomain: [0, 1] as [number, number],
     btcOpen,
   };
 }
@@ -73,6 +69,15 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [etTime, setEtTime] = useState("--:--:--");
   const [session, setSession] = useState("--");
+  const [atr, setAtr] = useState<number | null>(null);
+  const [atrMultiplier, setAtrMultiplier] = useState(0.1);
+  const [visible, setVisible] = useState({
+    btc: true,
+    poly: true,
+    open: true,
+    atrPlus: true,
+    atrMinus: true,
+  });
   const prevMarketSlug = useRef<string | null>(null);
 
   // ── Zoom/Pan State ──
@@ -92,6 +97,7 @@ export default function Dashboard() {
       const json: ApiResponse = await res.json();
       setData((prev) => {
         if (prev?.btcPrice) setPrevBtcPrice(prev.btcPrice);
+        if (json.atr !== undefined) setAtr(json.atr);
         return json;
       });
 
@@ -182,9 +188,14 @@ export default function Dashboard() {
     () => chartHistory.slice(view.lo, view.hi),
     [chartHistory, view]
   );
+  
+  const btcOpenPrice = useMemo(() => {
+    return chartHistory.length > 0 ? chartHistory[0].btc : 0;
+  }, [chartHistory]);
+
   const { btcDomain, polyDomain, btcOpen } = useMemo(
-    () => computeDomains(slice),
-    [slice]
+    () => computeDomains(slice, btcOpenPrice, atr, atrMultiplier, visible),
+    [slice, btcOpenPrice, atr, atrMultiplier, visible]
   );
 
   const xTicks = useMemo(() => {
@@ -312,298 +323,415 @@ export default function Dashboard() {
     <div className={styles.container}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');`}</style>
 
-      <div className={styles.inner}>
-        {/* ── Header ── */}
-        <div className={styles.header}>
-          <div className={styles.headerTop}>
-            <span className={styles.btcTitle}>BTC/USD</span>
-            <span className={styles.polyTitle}>× Polymarket UP</span>
+      {/* ── Header ── */}
+      <header className={styles.header}>
+        <div className={styles.headerTop}>
+          <span className={styles.btcTitle}>BTC/USD</span>
+          <span className={styles.polyTitle}>× Polymarket UP</span>
 
-            {/* candle counter */}
-            <span className={styles.pointCounter}>
-              {view.hi - view.lo} / {N} points
-            </span>
+          <span className={styles.pointCounter}>
+            {view.hi - view.lo} / {N} points
+          </span>
 
-            <div className={styles.headerRight}>
-              {isZoomed && (
-                <button onClick={resetZoom} className={styles.resetButton}>
-                  ⟳ reset
-                </button>
-              )}
-              <span className={styles.timeInfo}>15m · today</span>
-            </div>
-          </div>
-          <div className={styles.headerSub}>
-            SCROLL TO ZOOM · DRAG TO PAN · OPEN ↔ 50% ANCHORED
+          <div className={styles.headerRight}>
+            {isZoomed && (
+              <button onClick={resetZoom} className={styles.resetButton}>
+                ⟳ reset
+              </button>
+            )}
+            <span className={styles.timeInfo}>15m · today</span>
           </div>
         </div>
+      </header>
 
-        {/* Market Info Card */}
-        {poly && (
-          <div className={styles.card}>
-            <div className={styles.marketQuestion}>
-              {poly.question || "Loading market..."}
-            </div>
-            <div className={styles.marketMeta}>
-              <div>
-                <span className={styles.metaLabel}>Market: </span>
-                <span className={styles.metaValue}>{poly.slug || "-"}</span>
-              </div>
-              <div>
-                <span className={styles.metaLabel}>Time left: </span>
-                <span
-                  style={{ color: timeColor(timeLeftMin), fontWeight: 600 }}
+      <div className={styles.inner}>
+        {/* ── Main Content (Plot) ── */}
+        <main className={styles.mainContent}>
+          <div
+            ref={wrapRef}
+            className={`${styles.chartWrapper} ${
+              isDragging ? styles.chartDragging : styles.chartNormal
+            }`}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
+          >
+            {chartHistory.length > 1 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={slice}
+                  margin={{ top: 16, right: 64, left: 64, bottom: 8 }}
                 >
-                  {fmtTimeLeft(timeLeftMin)}
-                </span>
+                  <CartesianGrid stroke="#141420" vertical={false} />
+
+                  <XAxis
+                    dataKey="time"
+                    ticks={xTicks}
+                    tick={tickStyle}
+                    axisLine={{ stroke: "#1e1e2e" }}
+                    tickLine={false}
+                  />
+
+                  <YAxis
+                    yAxisId="btc"
+                    orientation="left"
+                    domain={btcDomain}
+                    tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
+                    tick={tickStyle}
+                    axisLine={false}
+                    tickLine={false}
+                    width={60}
+                  />
+
+                  <YAxis
+                    yAxisId="poly"
+                    orientation="right"
+                    domain={polyDomain}
+                    tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                    tick={tickStyle}
+                    axisLine={false}
+                    tickLine={false}
+                    width={48}
+                  />
+
+                  {visible.open && (
+                    <ReferenceLine
+                      yAxisId="btc"
+                      y={btcOpen}
+                      stroke="#1e1e30"
+                      strokeDasharray="5 4"
+                      strokeWidth={1}
+                      label={{
+                        value: "open / 50%",
+                        position: "insideLeft",
+                        fill: "#2e2e48",
+                        fontSize: 10,
+                        fontFamily: "JetBrains Mono, monospace",
+                      }}
+                    />
+                  )}
+
+                  {visible.atrPlus && atr !== null && (
+                    <ReferenceLine
+                      yAxisId="btc"
+                      y={btcOpen + (atr * atrMultiplier)}
+                      stroke="#f7931a"
+                      strokeDasharray="3 3"
+                      strokeWidth={1}
+                      strokeOpacity={0.4}
+                      label={{
+                        value: `+${atrMultiplier} ATR`,
+                        position: "insideRight",
+                        fill: "#f7931a",
+                        fontSize: 9,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fillOpacity: 0.4,
+                      }}
+                    />
+                  )}
+
+                  {visible.atrMinus && atr !== null && (
+                    <ReferenceLine
+                      yAxisId="btc"
+                      y={btcOpen - (atr * atrMultiplier)}
+                      stroke="#f7931a"
+                      strokeDasharray="3 3"
+                      strokeWidth={1}
+                      strokeOpacity={0.4}
+                      label={{
+                        value: `-${atrMultiplier} ATR`,
+                        position: "insideRight",
+                        fill: "#f7931a",
+                        fontSize: 9,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fillOpacity: 0.4,
+                      }}
+                    />
+                  )}
+
+                  {!isDragging && <Tooltip content={<CustomTooltip />} />}
+
+                  {visible.btc && (
+                    <Line
+                      yAxisId="btc"
+                      type="monotone"
+                      dataKey="btc"
+                      stroke="#f7931a"
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                      activeDot={{
+                        r: 4,
+                        fill: "#f7931a",
+                        stroke: "#0a0a10",
+                        strokeWidth: 2,
+                      }}
+                    />
+                  )}
+
+                  {visible.poly && (
+                    <Line
+                      yAxisId="poly"
+                      type="monotone"
+                      dataKey="poly"
+                      stroke="#4ade80"
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                      activeDot={{
+                        r: 4,
+                        fill: "#4ade80",
+                        stroke: "#0a0a10",
+                        strokeWidth: 2,
+                      }}
+                    />
+                  )}
+
+                  <Legend
+                    wrapperStyle={{
+                      paddingTop: 16,
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 12,
+                    }}
+                    formatter={(v) => {
+                      if (v === "btc" && visible.btc) {
+                        return <span style={{ color: "#f7931a" }}>BTC/USD (left, $)</span>;
+                      }
+                      if (v === "poly" && visible.poly) {
+                        return <span style={{ color: "#4ade80" }}>Polymarket UP (right, %)</span>;
+                      }
+                      return null;
+                    }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className={styles.noData}>
+                Collecting data points for chart...
               </div>
-            </div>
+            )}
           </div>
-        )}
 
-        {/* ── Chart ── */}
-        <div
-          ref={wrapRef}
-          className={`${styles.chartWrapper} ${
-            isDragging ? styles.chartDragging : styles.chartNormal
-          }`}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-        >
-          {chartHistory.length > 1 ? (
-            <ResponsiveContainer width="100%" height={420}>
-              <ComposedChart
-                data={slice}
-                margin={{ top: 16, right: 64, left: 64, bottom: 8 }}
-              >
-                <CartesianGrid stroke="#141420" vertical={false} />
+          <div className={styles.scrollbar}>
+            <div
+              className={styles.scrollbarThumb}
+              style={{
+                left: `${(view.lo / Math.max(1, N)) * 100}%`,
+                width: `${((view.hi - view.lo) / Math.max(1, N)) * 100}%`,
+                transition: isDragging ? "none" : "left .08s, width .08s",
+              }}
+            />
+          </div>
+        </main>
 
-                <XAxis
-                  dataKey="time"
-                  ticks={xTicks}
-                  tick={tickStyle}
-                  axisLine={{ stroke: "#1e1e2e" }}
-                  tickLine={false}
-                />
-
-                <YAxis
-                  yAxisId="btc"
-                  orientation="left"
-                  domain={btcDomain}
-                  tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
-                  tick={tickStyle}
-                  axisLine={false}
-                  tickLine={false}
-                  width={60}
-                />
-
-                <YAxis
-                  yAxisId="poly"
-                  orientation="right"
-                  domain={polyDomain}
-                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
-                  tick={tickStyle}
-                  axisLine={false}
-                  tickLine={false}
-                  width={48}
-                />
-
-                {/* Shared anchor baseline */}
-                <ReferenceLine
-                  yAxisId="btc"
-                  y={btcOpen}
-                  stroke="#1e1e30"
-                  strokeDasharray="5 4"
-                  strokeWidth={1}
-                  label={{
-                    value: "open / 50%",
-                    position: "insideLeft",
-                    fill: "#2e2e48",
-                    fontSize: 10,
-                    fontFamily: "JetBrains Mono, monospace",
-                  }}
-                />
-
-                {!isDragging && <Tooltip content={<CustomTooltip />} />}
-
-                <Line
-                  yAxisId="btc"
-                  type="monotone"
-                  dataKey="btc"
-                  stroke="#f7931a"
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                  activeDot={{
-                    r: 4,
-                    fill: "#f7931a",
-                    stroke: "#0a0a10",
-                    strokeWidth: 2,
-                  }}
-                />
-
-                <Line
-                  yAxisId="poly"
-                  type="monotone"
-                  dataKey="poly"
-                  stroke="#4ade80"
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                  activeDot={{
-                    r: 4,
-                    fill: "#4ade80",
-                    stroke: "#0a0a10",
-                    strokeWidth: 2,
-                  }}
-                />
-
-                <Legend
-                  wrapperStyle={{
-                    paddingTop: 16,
-                    fontFamily: "JetBrains Mono, monospace",
-                    fontSize: 12,
-                  }}
-                  formatter={(v) =>
-                    v === "btc" ? (
-                      <span style={{ color: "#f7931a" }}>
-                        BTC/USD (left, $)
-                      </span>
-                    ) : (
-                      <span style={{ color: "#4ade80" }}>
-                        Polymarket UP (right, %)
-                      </span>
-                    )
-                  }
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className={styles.noData}>
-              Collecting data points for chart...
+        {/* ── Sidebar ── */}
+        <aside className={styles.sidebar}>
+          {/* Market Info Card */}
+          {poly && (
+            <div className={styles.card}>
+              <div className={styles.marketQuestion}>
+                {poly.question || "Loading market..."}
+              </div>
+              <div className={styles.marketMeta}>
+                <div>
+                  <span className={styles.metaLabel}>Market: </span>
+                  <span className={styles.metaValue}>{poly.slug || "-"}</span>
+                </div>
+                <div>
+                  <span className={styles.metaLabel}>Time left: </span>
+                  <span
+                    style={{ color: timeColor(timeLeftMin), fontWeight: 600 }}
+                  >
+                    {fmtTimeLeft(timeLeftMin)}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
-        </div>
 
-        {/* ── Mini scrollbar ── */}
-        <div className={styles.scrollbar}>
-          <div
-            className={styles.scrollbarThumb}
-            style={{
-              left: `${(view.lo / Math.max(1, N)) * 100}%`,
-              width: `${((view.hi - view.lo) / Math.max(1, N)) * 100}%`,
-              transition: isDragging ? "none" : "left .08s, width .08s",
-            }}
-          />
-        </div>
-
-        {/* Data Grid */}
-        <div className={styles.grid}>
-          {/* Polymarket Card */}
-          <div className={styles.card}>
-            <div className={styles.cardTitle}>POLYMARKET</div>
-            <div className={styles.statGroup}>
-              <div>
-                <div className={styles.statLabel}>UP</div>
-                <div className={styles.statValue} style={{ color: "#4ade80" }}>
-                  {poly?.upPrice !== null && poly?.upPrice !== undefined
-                    ? `${(poly.upPrice * 100).toFixed(1)}c`
-                    : "-"}
+          {/* Data Grid */}
+          <div className={styles.grid}>
+            {/* Polymarket Card */}
+            <div className={styles.card}>
+              <div className={styles.cardTitle}>POLYMARKET</div>
+              <div className={styles.statGroup}>
+                <div>
+                  <div className={styles.statLabel}>UP</div>
+                  <div className={styles.statValue} style={{ color: "#4ade80" }}>
+                    {poly?.upPrice !== null && poly?.upPrice !== undefined
+                      ? `${(poly.upPrice * 100).toFixed(1)}c`
+                      : "-"}
+                  </div>
+                </div>
+                <div>
+                  <div className={styles.statLabel}>DOWN</div>
+                  <div className={styles.statValue} style={{ color: "#f87171" }}>
+                    {poly?.downPrice !== null && poly?.downPrice !== undefined
+                      ? `${(poly.downPrice * 100).toFixed(1)}c`
+                      : "-"}
+                  </div>
                 </div>
               </div>
-              <div>
-                <div className={styles.statLabel}>DOWN</div>
-                <div className={styles.statValue} style={{ color: "#f87171" }}>
-                  {poly?.downPrice !== null && poly?.downPrice !== undefined
-                    ? `${(poly.downPrice * 100).toFixed(1)}c`
-                    : "-"}
-                </div>
-              </div>
+              <DataRow
+                label="Liquidity"
+                value={poly?.liquidity ? formatNumber(poly.liquidity, 0) : "-"}
+              />
+              <DataRow
+                label="Time left"
+                value={fmtTimeLeft(poly?.timeLeftMin ?? null)}
+                valueColor={timeColor(poly?.timeLeftMin ?? null)}
+              />
             </div>
-            <DataRow
-              label="Liquidity"
-              value={poly?.liquidity ? formatNumber(poly.liquidity, 0) : "-"}
-            />
-            <DataRow
-              label="Time left"
-              value={fmtTimeLeft(poly?.timeLeftMin ?? null)}
-              valueColor={timeColor(poly?.timeLeftMin ?? null)}
-            />
+
+            {/* Prices Card */}
+            <div className={styles.card}>
+              <div className={styles.cardTitle}>PRICES</div>
+              <div style={{ marginBottom: 12 }}>
+                <div className={styles.btcLabel}>BTC (Binance)</div>
+                <div className={styles.btcValueContainer}>
+                  <span
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 700,
+                      color:
+                        btcPriceDirection === "up"
+                          ? "#4ade80"
+                          : btcPriceDirection === "down"
+                          ? "#f87171"
+                          : "#fff",
+                    }}
+                  >
+                    ${formatNumber(btcPrice, 2)}
+                    {btcPriceDirection === "up" && " ↑"}
+                    {btcPriceDirection === "down" && " ↓"}
+                  </span>
+                </div>
+              </div>
+              <DataRow
+                label="Price to Beat"
+                value={priceToBeat !== null ? `$${formatNumber(priceToBeat, 2)}` : "-"}
+              />
+              <DataRow
+                label="Delta"
+                value={
+                  ptbDelta !== null ? `${ptbDelta > 0 ? "+" : ""}$${ptbDelta.toFixed(2)}` : "-"
+                }
+                valueColor={
+                  ptbDelta === null
+                    ? "#50506a"
+                    : ptbDelta > 0
+                    ? "#4ade80"
+                    : ptbDelta < 0
+                    ? "#f87171"
+                    : "#50506a"
+                }
+              />
+            </div>
           </div>
 
-          {/* Prices Card */}
+          {/* Session Info */}
+          <div className={styles.sessionCard}>
+            <div className={styles.sessionGroup}>
+              <div>
+                <span className={styles.sessionLabel}>ET Time: </span>
+                <span className={styles.sessionValue}>{etTime}</span>
+              </div>
+              <div>
+                <span className={styles.sessionLabel}>Session: </span>
+                <span className={styles.sessionValue}>{session}</span>
+              </div>
+              {atr !== null && (
+                <div>
+                  <span className={styles.sessionLabel}>15m ATR: </span>
+                  <span className={styles.sessionValue}>${formatNumber(atr, 2)}</span>
+                </div>
+              )}
+            </div>
+            <div className={styles.pollingInfo}>Polling every 1s</div>
+          </div>
+
+          {/* Chart Controls */}
           <div className={styles.card}>
-            <div className={styles.cardTitle}>PRICES</div>
-            <div style={{ marginBottom: 12 }}>
-              <div className={styles.btcLabel}>BTC (Binance)</div>
-              <div className={styles.btcValueContainer}>
-                <span
-                  style={{
-                    fontSize: 22,
-                    fontWeight: 700,
-                    color:
-                      btcPriceDirection === "up"
-                        ? "#4ade80"
-                        : btcPriceDirection === "down"
-                        ? "#f87171"
-                        : "#fff",
-                  }}
-                >
-                  ${formatNumber(btcPrice, 2)}
-                  {btcPriceDirection === "up" && " ↑"}
-                  {btcPriceDirection === "down" && " ↓"}
+            <div className={styles.cardTitle}>CHART LAYERS</div>
+            <div className={styles.toggleGroup}>
+              <label className={styles.toggleItem}>
+                <input
+                  type="checkbox"
+                  className={styles.toggleCheckbox}
+                  checked={visible.btc}
+                  onChange={() => setVisible(v => ({ ...v, btc: !v.btc }))}
+                />
+                <span className={`${styles.toggleLabel} ${visible.btc ? styles.toggleLabelActive : ""}`}>
+                  BTC Price
                 </span>
-              </div>
+              </label>
+              <label className={styles.toggleItem}>
+                <input
+                  type="checkbox"
+                  className={styles.toggleCheckbox}
+                  checked={visible.poly}
+                  onChange={() => setVisible(v => ({ ...v, poly: !v.poly }))}
+                />
+                <span className={`${styles.toggleLabel} ${visible.poly ? styles.toggleLabelActive : ""}`}>
+                  Polymarket %
+                </span>
+              </label>
+              <label className={styles.toggleItem}>
+                <input
+                  type="checkbox"
+                  className={styles.toggleCheckbox}
+                  checked={visible.open}
+                  onChange={() => setVisible(v => ({ ...v, open: !v.open }))}
+                />
+                <span className={`${styles.toggleLabel} ${visible.open ? styles.toggleLabelActive : ""}`}>
+                  Open Price
+                </span>
+              </label>
+              <label className={styles.toggleItem}>
+                <input
+                  type="checkbox"
+                  className={styles.toggleCheckbox}
+                  checked={visible.atrPlus}
+                  onChange={() => setVisible(v => ({ ...v, atrPlus: !v.atrPlus }))}
+                />
+                <span className={`${styles.toggleLabel} ${visible.atrPlus ? styles.toggleLabelActive : ""}`}>
+                  Open + ATR
+                </span>
+              </label>
+              <label className={styles.toggleItem}>
+                <input
+                  type="checkbox"
+                  className={styles.toggleCheckbox}
+                  checked={visible.atrMinus}
+                  onChange={() => setVisible(v => ({ ...v, atrMinus: !v.atrMinus }))}
+                />
+                <span className={`${styles.toggleLabel} ${visible.atrMinus ? styles.toggleLabelActive : ""}`}>
+                  Open - ATR
+                </span>
+              </label>
             </div>
-            <DataRow
-              label="Price to Beat"
-              value={priceToBeat !== null ? `$${formatNumber(priceToBeat, 2)}` : "-"}
-            />
-            <DataRow
-              label="Delta"
-              value={
-                ptbDelta !== null ? `${ptbDelta > 0 ? "+" : ""}$${ptbDelta.toFixed(2)}` : "-"
-              }
-              valueColor={
-                ptbDelta === null
-                  ? "#50506a"
-                  : ptbDelta > 0
-                  ? "#4ade80"
-                  : ptbDelta < 0
-                  ? "#f87171"
-                  : "#50506a"
-              }
-            />
-          </div>
-        </div>
 
-        {/* Session Info */}
-        <div className={styles.sessionCard}>
-          <div className={styles.sessionGroup}>
-            <div>
-              <span className={styles.sessionLabel}>ET Time: </span>
-              <span className={styles.sessionValue}>{etTime}</span>
-            </div>
-            <div>
-              <span className={styles.sessionLabel}>Session: </span>
-              <span className={styles.sessionValue}>{session}</span>
+            <div className={styles.multiplierContainer}>
+              <div className={styles.multiplierLabel}>ATR Multiplier</div>
+              <input
+                type="number"
+                step="0.05"
+                min="0"
+                className={styles.multiplierInput}
+                value={atrMultiplier}
+                onChange={(e) => setAtrMultiplier(parseFloat(e.target.value) || 0)}
+              />
             </div>
           </div>
-          <div className={styles.pollingInfo}>Polling every 1s</div>
-        </div>
 
-        {/* ── Footer ── */}
-        <div className={styles.footer}>
-          <span className={styles.footerLabel}>How it works: </span>
-          both Y-domains are recomputed on every pan/zoom so BTC open and
-          Polymarket 50% stay on the same horizontal line at all zoom levels.
-          <span className={styles.footerSub}>
-            {" "}
-            · isAnimationActive=false keeps panning smooth.
-          </span>
-        </div>
+          {/* Footer Info */}
+          <div className={styles.footer}>
+            <span className={styles.footerLabel}>How it works: </span>
+            BTC Y-domain is recomputed to keep the open price exactly at the center.
+            Polymarket Y-axis is fixed from 0% to 100%.
+          </div>
+        </aside>
 
         {error && <div className={styles.errorToast}>Error: {error}</div>}
       </div>

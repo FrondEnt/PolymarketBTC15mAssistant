@@ -22,6 +22,7 @@ export interface ApiResponse {
   polymarket: PolymarketData;
   timeLeftMin: number | null;
   history: HistoryPoint[];
+  atr: number | null;
 }
 
 export interface ChartPoint {

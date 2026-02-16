@@ -48,6 +48,38 @@ async function fetchBinanceKlines(
   }
 }
 
+function calculateAtr(klines: any[], period = 14): number | null {
+  if (klines.length < period + 1) return null;
+  
+  const trs: number[] = [];
+  for (let i = 1; i < klines.length; i++) {
+    const high = klines[i].high;
+    const low = klines[i].low;
+    const prevClose = klines[i - 1].close;
+    
+    if (high === null || low === null || prevClose === null) continue;
+    
+    const tr = Math.max(
+      high - low,
+      Math.abs(high - prevClose),
+      Math.abs(low - prevClose)
+    );
+    trs.push(tr);
+  }
+  
+  if (trs.length < period) return null;
+  
+  // Simple Moving Average of True Range for simplicity, 
+  // or Wilder's Smoothing if we want to be precise.
+  // Let's use Wilder's Smoothing.
+  let atr = trs.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < trs.length; i++) {
+    atr = (atr * (period - 1) + trs[i]) / period;
+  }
+  
+  return atr;
+}
+
 async function fetchPolymarketPriceHistory(
   tokenId: string,
   startTsSec: number,
@@ -196,7 +228,7 @@ export async function GET() {
       }
     }
 
-    const [upPrice, downPrice, btcKlines1s, polyHistory] = await Promise.all([
+    const [upPrice, downPrice, btcKlines1s, polyHistory, btcKlines15m] = await Promise.all([
       upTokenId ? fetchClobPrice(upTokenId, "buy") : Promise.resolve(null),
       downTokenId ? fetchClobPrice(downTokenId, "buy") : Promise.resolve(null),
       fetchBinanceKlines("1s", 1000, windowStartMs, nowMs),
@@ -207,7 +239,10 @@ export async function GET() {
             Math.floor(nowMs / 1000),
           )
         : Promise.resolve([]),
+      fetchBinanceKlines("15m", 30), // Fetch 30 candles to ensure we have enough for 14-period ATR
     ]);
+
+    const atr = calculateAtr(btcKlines15m);
 
     let polyData: {
       question: string | null;
@@ -282,6 +317,7 @@ export async function GET() {
       polymarket: polyData,
       timeLeftMin,
       history,
+      atr,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
