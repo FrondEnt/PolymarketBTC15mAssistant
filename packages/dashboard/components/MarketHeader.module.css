@@ -1,0 +1,163 @@
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 0;
+  margin-bottom: 8px;
+  background: transparent;
+  width: 100%;
+}
+
+.leftSection {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.iconWrapper {
+  width: 48px;
+  height: 48px;
+  background: #f7931a;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btcIcon {
+  color: #fff;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+.dateStr {
+  font-size: 14px;
+  color: #888;
+  margin: 4px 0 0 0;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.centerSection {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #50506a;
+  letter-spacing: 0.5px;
+}
+
+.statValue {
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.highlight {
+  color: #f7931a;
+}
+
+.divider {
+  width: 1px;
+  height: 48px;
+  background: #1e1e2e;
+}
+
+.currentPriceLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.delta {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.up {
+  color: #4ade80;
+}
+
+.down {
+  color: #f87171;
+}
+
+.rightSection {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.timer {
+  display: flex;
+  gap: 12px;
+}
+
+.timerUnit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.timerValue {
+  font-size: 36px;
+  font-weight: 700;
+  color: #f87171;
+  line-height: 1;
+}
+
+.timerLabel {
+  font-size: 9px;
+  font-weight: 700;
+  color: #50506a;
+  margin-top: 4px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.actionBtn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.actionBtn:hover {
+  color: #fff;
+}
+
+.actionBtn svg {
+  width: 20px;
+  height: 20px;
+}

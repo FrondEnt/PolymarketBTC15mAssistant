@@ -23,6 +23,7 @@ import {
 } from "./utils";
 import { DataRow } from "./DataRow";
 import { CustomTooltip } from "./CustomTooltip";
+import { MarketHeader } from "./MarketHeader";
 
 // ─── Domain alignment (open ↔ 50% on same Y pixel) ────────────────────────
 function computeDomains(slice: ChartPoint[], btcOpen: number, atr: number | null, atrMultiplier: number, visible: any, padding = 0.18) {
@@ -351,6 +352,18 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
       <div className={styles.inner}>
         {/* ── Main Content (Plot) ── */}
         <main className={styles.mainContent}>
+          <MarketHeader
+            title={poly?.question || "Bitcoin Up or Down - 15 min"}
+            dateStr={`${new Date().toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}, ${interval}M-${poly?.slug?.split("-").pop() || ""} ET`}
+            priceToBeat={priceToBeat}
+            currentPrice={btcPrice}
+            prevPrice={prevBtcPrice}
+            timeLeftMin={timeLeftMin}
+          />
           <div
             ref={wrapRef}
             className={`${styles.chartWrapper} ${

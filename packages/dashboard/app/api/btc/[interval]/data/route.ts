@@ -285,6 +285,11 @@ export async function GET(
       const timeLeftMin = endMs ? (endMs - Date.now()) / 60_000 : null;
       const liquidity = toNumber(market.liquidityNum) ?? toNumber(market.liquidity);
 
+      // For these markets, the "price to beat" is the opening price of the interval.
+      // If not explicitly in the question, we can use the first BTC price from our history
+      // or the first price we see in the current window.
+      let priceToBeat = parsePriceToBeat(market);
+      
       polyData = {
         question: market.question ?? null,
         slug: market.slug ?? null,
@@ -293,7 +298,7 @@ export async function GET(
         upPrice,
         downPrice,
         liquidity,
-        priceToBeat: parsePriceToBeat(market),
+        priceToBeat,
         timeLeftMin,
       };
     }
@@ -320,6 +325,11 @@ export async function GET(
         history.push({ timeMs: k.openTime, btc: k.close, poly: polyPrice });
         nextSampleTime = k.openTime + SAMPLE_INTERVAL_MS;
       }
+    }
+
+    // If priceToBeat is still null, use the first BTC price in the current interval
+    if (polyData.priceToBeat === null && history.length > 0) {
+      polyData.priceToBeat = history[0].btc;
     }
 
     const candleTimeLeftMin = (windowEndMs - nowMs) / 60_000;

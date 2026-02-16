@@ -21,7 +21,7 @@
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid #161622;
-  padding: 16px;
+  padding: 0 24px 24px 24px;
 }
 
 .sidebar {
@@ -137,7 +137,7 @@
   width: 100%;
   background: #0d0d16;
   border: 1px solid #161622;
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 20px 8px 12px;
   margin-bottom: 6px;
   user-select: none;
