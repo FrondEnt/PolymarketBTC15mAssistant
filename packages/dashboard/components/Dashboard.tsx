@@ -63,6 +63,7 @@ function computeDomains(slice: ChartPoint[], btcOpen: number, atr: number | null
 }
 
 const MIN_VISIBLE = 6;
+const INTERP_DURATION = 800; // ms – smooth transition between data points
 
 interface DashboardProps {
   interval?: number;
@@ -95,6 +96,30 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
     startHi: number;
   } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  // ── Smooth interpolation state for the latest data point ──
+  const prevChartLenRef = useRef(0);
+  const animStateRef = useRef<{
+    fromBtc: number;
+    fromPoly: number;
+    toBtc: number;
+    toPoly: number;
+    startTime: number;
+  } | null>(null);
+  const interpolatedRef = useRef<{ btc: number; poly: number } | null>(null);
+  const rafRef = useRef<number>(0);
+  const [interpolated, setInterpolated] = useState<{
+    btc: number;
+    poly: number;
+  } | null>(null);
+  const xAnimRef = useRef<{
+    from: number;
+    to: number;
+    startTime: number;
+  } | null>(null);
+  const [animatedXHi, setAnimatedXHi] = useState<number | null>(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
 
   const fetchData = useCallback(async () => {
     try {
@@ -189,6 +214,75 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
     return () => clearInterval(interval);
   }, []);
 
+  // ── Detect new data points → kick off smooth Y + X animation ──
+  useEffect(() => {
+    const len = chartHistory.length;
+    if (len >= 2 && len !== prevChartLenRef.current) {
+      const now = performance.now();
+      const to = chartHistory[len - 1];
+      const from = interpolatedRef.current ?? chartHistory[len - 2];
+      animStateRef.current = {
+        fromBtc: from.btc,
+        fromPoly: from.poly,
+        toBtc: to.btc,
+        toPoly: to.poly,
+        startTime: now,
+      };
+
+      // X-domain animation: only when auto-advancing (viewing latest data)
+      if (viewRef.current.hi >= len) {
+        xAnimRef.current = {
+          from: chartHistory[len - 2].idx,
+          to: chartHistory[len - 1].idx,
+          startTime: now,
+        };
+      }
+    }
+    prevChartLenRef.current = len;
+  }, [chartHistory]);
+
+  // ── requestAnimationFrame loop for smooth Y + X interpolation ──
+  useEffect(() => {
+    let active = true;
+    const tick = () => {
+      if (!active) return;
+      const now = performance.now();
+
+      // Y-value interpolation
+      const a = animStateRef.current;
+      if (a) {
+        const t = Math.min(1, (now - a.startTime) / INTERP_DURATION);
+        const e = 1 - (1 - t) * (1 - t) * (1 - t); // easeOutCubic
+        const val = {
+          btc: a.fromBtc + (a.toBtc - a.fromBtc) * e,
+          poly: a.fromPoly + (a.toPoly - a.fromPoly) * e,
+        };
+        interpolatedRef.current = val;
+        setInterpolated(val);
+        if (t >= 1) animStateRef.current = null;
+      }
+
+      // X-domain interpolation
+      const xa = xAnimRef.current;
+      if (xa) {
+        const t = Math.min(1, (now - xa.startTime) / INTERP_DURATION);
+        const e = 1 - (1 - t) * (1 - t) * (1 - t);
+        setAnimatedXHi(xa.from + (xa.to - xa.from) * e);
+        if (t >= 1) {
+          setAnimatedXHi(null);
+          xAnimRef.current = null;
+        }
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      active = false;
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
   const N = chartHistory.length;
   const slice = useMemo(
     () => chartHistory.slice(view.lo, view.hi),
@@ -208,10 +302,40 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
   );
 
   const xTicks = useMemo(() => {
-    if (slice.length <= 10) return slice.map((d) => d.time);
+    if (slice.length <= 10) return slice.map((d) => d.idx);
     const step = Math.max(1, Math.floor(slice.length / 8));
-    return slice.filter((_, i) => i % step === 0).map((d) => d.time);
+    return slice.filter((_, i) => i % step === 0).map((d) => d.idx);
   }, [slice]);
+
+  const idxToTime = useMemo(() => {
+    const map = new Map<number, string>();
+    slice.forEach((p) => map.set(p.idx, p.time));
+    return map;
+  }, [slice]);
+
+  const xDomain = useMemo((): [number, number] => {
+    if (!slice.length) return [0, 1];
+    const lo = slice[0].idx;
+    const realHi = slice[slice.length - 1].idx;
+    const hi =
+      animatedXHi !== null && view.hi >= chartHistory.length
+        ? animatedXHi
+        : realHi;
+    return [lo, Math.max(lo + 1, hi)];
+  }, [slice, animatedXHi, view.hi, chartHistory.length]);
+
+  // ── Smoothed slice: replaces the last point with its interpolated value ──
+  const displaySlice = useMemo(() => {
+    if (!slice.length || !interpolated || view.hi < chartHistory.length)
+      return slice;
+    const out = slice.slice();
+    out[out.length - 1] = {
+      ...out[out.length - 1],
+      btc: interpolated.btc,
+      poly: interpolated.poly,
+    };
+    return out;
+  }, [slice, interpolated, view.hi, chartHistory.length]);
 
   const tickStyle = {
     fill: "#555",
@@ -379,14 +503,20 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
             {chartHistory.length > 1 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
-                  data={slice}
+                  data={displaySlice}
                   margin={{ top: 16, right: 64, left: 64, bottom: 8 }}
                 >
                   <CartesianGrid stroke="#141420" vertical={false} />
 
                   <XAxis
-                    dataKey="time"
+                    dataKey="idx"
+                    type="number"
+                    domain={xDomain}
+                    allowDataOverflow
                     ticks={xTicks}
+                    tickFormatter={(idx: number) =>
+                      idxToTime.get(idx) ?? ""
+                    }
                     tick={tickStyle}
                     axisLine={{ stroke: "#1e1e2e" }}
                     tickLine={false}
