@@ -112,14 +112,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
     btc: number;
     poly: number;
   } | null>(null);
-  const xAnimRef = useRef<{
-    from: number;
-    to: number;
-    startTime: number;
-  } | null>(null);
-  const [animatedXHi, setAnimatedXHi] = useState<number | null>(null);
-  const viewRef = useRef(view);
-  viewRef.current = view;
 
   const fetchData = useCallback(async () => {
     try {
@@ -214,11 +206,10 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Detect new data points → kick off smooth Y + X animation ──
+  // ── Detect new data points → kick off smooth animation ──
   useEffect(() => {
     const len = chartHistory.length;
     if (len >= 2 && len !== prevChartLenRef.current) {
-      const now = performance.now();
       const to = chartHistory[len - 1];
       const from = interpolatedRef.current ?? chartHistory[len - 2];
       animStateRef.current = {
@@ -226,32 +217,23 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
         fromPoly: from.poly,
         toBtc: to.btc,
         toPoly: to.poly,
-        startTime: now,
+        startTime: performance.now(),
       };
-
-      // X-domain animation: only when auto-advancing (viewing latest data)
-      if (viewRef.current.hi >= len) {
-        xAnimRef.current = {
-          from: chartHistory[len - 2].idx,
-          to: chartHistory[len - 1].idx,
-          startTime: now,
-        };
-      }
     }
     prevChartLenRef.current = len;
   }, [chartHistory]);
 
-  // ── requestAnimationFrame loop for smooth Y + X interpolation ──
+  // ── requestAnimationFrame loop for smooth interpolation ──
   useEffect(() => {
     let active = true;
     const tick = () => {
       if (!active) return;
-      const now = performance.now();
-
-      // Y-value interpolation
       const a = animStateRef.current;
       if (a) {
-        const t = Math.min(1, (now - a.startTime) / INTERP_DURATION);
+        const t = Math.min(
+          1,
+          (performance.now() - a.startTime) / INTERP_DURATION
+        );
         const e = 1 - (1 - t) * (1 - t) * (1 - t); // easeOutCubic
         const val = {
           btc: a.fromBtc + (a.toBtc - a.fromBtc) * e,
@@ -261,19 +243,6 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
         setInterpolated(val);
         if (t >= 1) animStateRef.current = null;
       }
-
-      // X-domain interpolation
-      const xa = xAnimRef.current;
-      if (xa) {
-        const t = Math.min(1, (now - xa.startTime) / INTERP_DURATION);
-        const e = 1 - (1 - t) * (1 - t) * (1 - t);
-        setAnimatedXHi(xa.from + (xa.to - xa.from) * e);
-        if (t >= 1) {
-          setAnimatedXHi(null);
-          xAnimRef.current = null;
-        }
-      }
-
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -302,27 +271,10 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
   );
 
   const xTicks = useMemo(() => {
-    if (slice.length <= 10) return slice.map((d) => d.idx);
+    if (slice.length <= 10) return slice.map((d) => d.time);
     const step = Math.max(1, Math.floor(slice.length / 8));
-    return slice.filter((_, i) => i % step === 0).map((d) => d.idx);
+    return slice.filter((_, i) => i % step === 0).map((d) => d.time);
   }, [slice]);
-
-  const idxToTime = useMemo(() => {
-    const map = new Map<number, string>();
-    slice.forEach((p) => map.set(p.idx, p.time));
-    return map;
-  }, [slice]);
-
-  const xDomain = useMemo((): [number, number] => {
-    if (!slice.length) return [0, 1];
-    const lo = slice[0].idx;
-    const realHi = slice[slice.length - 1].idx;
-    const hi =
-      animatedXHi !== null && view.hi >= chartHistory.length
-        ? animatedXHi
-        : realHi;
-    return [lo, Math.max(lo + 1, hi)];
-  }, [slice, animatedXHi, view.hi, chartHistory.length]);
 
   // ── Smoothed slice: replaces the last point with its interpolated value ──
   const displaySlice = useMemo(() => {
@@ -509,14 +461,8 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
                   <CartesianGrid stroke="#141420" vertical={false} />
 
                   <XAxis
-                    dataKey="idx"
-                    type="number"
-                    domain={xDomain}
-                    allowDataOverflow
+                    dataKey="time"
                     ticks={xTicks}
-                    tickFormatter={(idx: number) =>
-                      idxToTime.get(idx) ?? ""
-                    }
                     tick={tickStyle}
                     axisLine={{ stroke: "#1e1e2e" }}
                     tickLine={false}

@@ -1,13 +1,12 @@
 import styles from "./Dashboard.module.css";
 
-export const CustomTooltip = ({ active, payload }: any) => {
+export const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
-  const timeLabel = payload[0]?.payload?.time ?? "";
   const btc = payload.find((p: any) => p.dataKey === "btc");
   const poly = payload.find((p: any) => p.dataKey === "poly");
   return (
     <div className={styles.tooltip}>
-      <div className={styles.tooltipLabel}>{timeLabel}</div>
+      <div className={styles.tooltipLabel}>{label}</div>
       {btc && (
         <div className={styles.tooltipBtc}>
           BTC <span className={styles.tooltipWhite}>${btc.value?.toLocaleString()}</span>
