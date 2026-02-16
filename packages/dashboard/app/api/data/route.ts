@@ -21,9 +21,16 @@ async function fetchBinancePrice(): Promise<number | null> {
   }
 }
 
-async function fetchBinanceKlines(interval: string, limit: number) {
+async function fetchBinanceKlines(
+  interval: string,
+  limit: number,
+  startTime?: number,
+  endTime?: number,
+) {
   try {
-    const url = `${BINANCE_BASE}/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`;
+    let url = `${BINANCE_BASE}/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`;
+    if (startTime !== undefined) url += `&startTime=${startTime}`;
+    if (endTime !== undefined) url += `&endTime=${endTime}`;
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return [];
     const data = await res.json();
@@ -36,6 +43,29 @@ async function fetchBinanceKlines(interval: string, limit: number) {
       volume: toNumber(k[5]),
       closeTime: Number(k[6]),
     }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchPolymarketPriceHistory(
+  tokenId: string,
+  startTsSec: number,
+  endTsSec: number,
+  fidelity = 1,
+): Promise<Array<{ t: number; p: number }>> {
+  try {
+    const url = `${CLOB_BASE}/prices-history?market=${tokenId}&startTs=${startTsSec}&endTs=${endTsSec}&fidelity=${fidelity}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const history = Array.isArray(data) ? data : data?.history || [];
+    return history
+      .map((item: Record<string, unknown>) => ({
+        t: Number(item.t),
+        p: Number(item.p),
+      }))
+      .filter((item: { t: number; p: number }) => Number.isFinite(item.t) && Number.isFinite(item.p));
   } catch {
     return [];
   }
@@ -138,14 +168,46 @@ function parsePriceToBeat(market: Market): number | null {
 
 export async function GET() {
   try {
-    const [btcPrice, klines1m, events] = await Promise.all([
+    const windowMs = 15 * 60_000;
+    const nowMs = Date.now();
+    const windowStartMs = Math.floor(nowMs / windowMs) * windowMs;
+    const windowEndMs = windowStartMs + windowMs;
+
+    const [btcPrice, events] = await Promise.all([
       fetchBinancePrice(),
-      fetchBinanceKlines("1m", 60),
       fetchLiveEvents(),
     ]);
 
     const markets = flattenEventMarkets(events);
     const market = pickLatestLiveMarket(markets);
+
+    let upTokenId: string | null = null;
+    let downTokenId: string | null = null;
+
+    if (market) {
+      const outcomes = parseArray(market.outcomes);
+      const clobTokenIds = parseArray(market.clobTokenIds);
+      for (let i = 0; i < outcomes.length; i++) {
+        const label = outcomes[i].toLowerCase();
+        const tokenId = clobTokenIds[i] || null;
+        if (!tokenId) continue;
+        if (label === "up") upTokenId = tokenId;
+        if (label === "down") downTokenId = tokenId;
+      }
+    }
+
+    const [upPrice, downPrice, btcKlines1s, polyHistory] = await Promise.all([
+      upTokenId ? fetchClobPrice(upTokenId, "buy") : Promise.resolve(null),
+      downTokenId ? fetchClobPrice(downTokenId, "buy") : Promise.resolve(null),
+      fetchBinanceKlines("1s", 1000, windowStartMs, nowMs),
+      upTokenId
+        ? fetchPolymarketPriceHistory(
+            upTokenId,
+            Math.floor(windowStartMs / 1000),
+            Math.floor(nowMs / 1000),
+          )
+        : Promise.resolve([]),
+    ]);
 
     let polyData: {
       question: string | null;
@@ -170,29 +232,6 @@ export async function GET() {
     };
 
     if (market) {
-      const outcomes = parseArray(market.outcomes);
-      const clobTokenIds = parseArray(market.clobTokenIds);
-
-      let upTokenId: string | null = null;
-      let downTokenId: string | null = null;
-      for (let i = 0; i < outcomes.length; i++) {
-        const label = outcomes[i].toLowerCase();
-        const tokenId = clobTokenIds[i] || null;
-        if (!tokenId) continue;
-        if (label === "up") upTokenId = tokenId;
-        if (label === "down") downTokenId = tokenId;
-      }
-
-      let upPrice: number | null = null;
-      let downPrice: number | null = null;
-
-      if (upTokenId && downTokenId) {
-        [upPrice, downPrice] = await Promise.all([
-          fetchClobPrice(upTokenId, "buy"),
-          fetchClobPrice(downTokenId, "buy"),
-        ]);
-      }
-
       const endMs = market.endDate ? new Date(market.endDate).getTime() : null;
       const timeLeftMin = endMs ? (endMs - Date.now()) / 60_000 : null;
       const liquidity = toNumber(market.liquidityNum) ?? toNumber(market.liquidity);
@@ -210,28 +249,39 @@ export async function GET() {
       };
     }
 
-    const windowMs = 15 * 60_000;
-    const nowMs = Date.now();
-    const startMs = Math.floor(nowMs / windowMs) * windowMs;
-    const endMs = startMs + windowMs;
-    const candleTimeLeftMin = (endMs - nowMs) / 60_000;
-
-    const timeLeftMin = polyData.timeLeftMin ?? candleTimeLeftMin;
-
-    const klines = klines1m.map((k: { openTime: number; close: number | null; volume: number | null }) => ({
-      time: new Date(k.openTime).toLocaleTimeString("en-US", {
-        hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/New_York",
-      }),
-      close: k.close,
-      volume: k.volume,
+    const polyHistoryMs = polyHistory.map((item) => ({
+      t: item.t < 1e12 ? item.t * 1000 : item.t,
+      p: item.p,
     }));
+
+    const SAMPLE_INTERVAL_MS = 5000;
+    const history: Array<{ timeMs: number; btc: number; poly: number | null }> = [];
+    let nextSampleTime = windowStartMs;
+
+    for (const k of btcKlines1s) {
+      if (k.openTime >= nextSampleTime && k.close !== null) {
+        let polyPrice: number | null = null;
+        for (let i = polyHistoryMs.length - 1; i >= 0; i--) {
+          if (polyHistoryMs[i].t <= k.openTime) {
+            polyPrice = polyHistoryMs[i].p;
+            break;
+          }
+        }
+
+        history.push({ timeMs: k.openTime, btc: k.close, poly: polyPrice });
+        nextSampleTime = k.openTime + SAMPLE_INTERVAL_MS;
+      }
+    }
+
+    const candleTimeLeftMin = (windowEndMs - nowMs) / 60_000;
+    const timeLeftMin = polyData.timeLeftMin ?? candleTimeLeftMin;
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
       btcPrice,
       polymarket: polyData,
       timeLeftMin,
-      klines,
+      history,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

@@ -18,12 +18,18 @@ interface PolymarketData {
   timeLeftMin: number | null;
 }
 
+interface HistoryPoint {
+  timeMs: number;
+  btc: number;
+  poly: number | null;
+}
+
 interface ApiResponse {
   timestamp: string;
   btcPrice: number | null;
   polymarket: PolymarketData;
   timeLeftMin: number | null;
-  klines: Array<{ time: string; close: number | null; volume: number | null }>;
+  history: HistoryPoint[];
 }
 
 interface ChartPoint {
@@ -150,6 +156,19 @@ export default function Dashboard() {
             return [point];
           }
           prevMarketSlug.current = currentSlug;
+
+          if (prev.length === 0 && json.history && json.history.length > 0) {
+            const seeded: ChartPoint[] = json.history
+              .filter((h) => h.poly !== null)
+              .map((h) => ({
+                time: new Date(h.timeMs).toLocaleTimeString("en-US", {
+                  hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+                }),
+                btc: h.btc,
+                poly: h.poly!,
+              }));
+            return [...seeded, point];
+          }
 
           const updated = [...prev, point];
           if (updated.length > 200) return updated.slice(-200);
