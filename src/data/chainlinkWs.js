@@ -66,9 +66,12 @@ export function startChainlinkPriceStream({
       }
     };
 
+    let reconnecting = false;
     const scheduleReconnect = () => {
-      if (closed) return;
+      if (closed || reconnecting) return;
+      reconnecting = true;
       try {
+        ws?.removeAllListeners();
         ws?.terminate();
       } catch {
         // ignore
