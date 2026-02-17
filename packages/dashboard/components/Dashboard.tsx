@@ -77,7 +77,7 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
   const [etTime, setEtTime] = useState("--:--:--");
   const [session, setSession] = useState("--");
   const [atr, setAtr] = useState<number | null>(null);
-  const [atrMultiplier, setAtrMultiplier] = useState(0.5);
+  const [atrMultiplier, setAtrMultiplier] = useState(0.4);
   const [visible, setVisible] = useState({
     btc: true,
     poly: true,
@@ -86,6 +86,7 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
     atrMinus: true,
   });
   const prevMarketSlug = useRef<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // ── Zoom/Pan State ──
   const [view, setView] = useState({ lo: 0, hi: 0 });
@@ -172,13 +173,8 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
           const updated = [...baseHistory, newPoint];
           const final = updated.length > 500 ? updated.slice(-500) : updated;
 
-          // Reset view if it was at the end or uninitialized
-          setView((v) => {
-            if (v.hi === 0 || v.hi === baseHistory.length) {
-              return { lo: 0, hi: final.length };
-            }
-            return v;
-          });
+          // Always show all data since zoom/pan is disabled
+          setView({ lo: 0, hi: final.length });
 
           return final;
         });
@@ -365,22 +361,24 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
     [N]
   );
 
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [onWheel]);
+  // Disabled zoom/pan functionality to allow page scrolling
+  // useEffect(() => {
+  //   const el = wrapRef.current;
+  //   if (!el) return;
+  //   el.addEventListener("wheel", onWheel, { passive: false });
+  //   return () => el.removeEventListener("wheel", onWheel);
+  // }, [onWheel]);
 
-  useEffect(() => {
-    if (!isDragging) return;
-    const up = () => {
-      dragRef.current = null;
-      setIsDragging(false);
-    };
-    globalThis.addEventListener("mouseup", up);
-    return () => globalThis.removeEventListener("mouseup", up);
-  }, [isDragging]);
+  // Disabled dragging functionality
+  // useEffect(() => {
+  //   if (!isDragging) return;
+  //   const up = () => {
+  //     dragRef.current = null;
+  //     setIsDragging(false);
+  //   };
+  //   globalThis.addEventListener("mouseup", up);
+  //   return () => globalThis.removeEventListener("mouseup", up);
+  // }, [isDragging]);
 
   const resetZoom = () => setView({ lo: 0, hi: N });
   const isZoomed = N > 0 && (view.lo !== 0 || view.hi !== N);
@@ -410,7 +408,15 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
       <header className={styles.header}>
         <div className={styles.headerTop}>
           <span className={styles.btcTitle}>BTC/USD</span>
-          <span className={styles.polyTitle}>× Polymarket UP</span>
+          <span className={styles.polyTitle}>× Polymarket</span>
+          <span className={styles.polyValues}>
+            <span className={styles.polyUp}>
+              UP {poly?.upPrice != null ? `${(poly.upPrice * 100).toFixed(1)}c` : "-"}
+            </span>
+            <span className={styles.polyDown}>
+              DOWN {poly?.downPrice != null ? `${(poly.downPrice * 100).toFixed(1)}c` : "-"}
+            </span>
+          </span>
 
           <span className={styles.pointCounter}>
             {view.hi - view.lo} / {N} points
@@ -444,13 +450,7 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
           />
           <div
             ref={wrapRef}
-            className={`${styles.chartWrapper} ${
-              isDragging ? styles.chartDragging : styles.chartNormal
-            }`}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
+            className={styles.chartWrapper}
           >
             {chartHistory.length > 1 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -607,7 +607,18 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
         </main>
 
         {/* ── Sidebar ── */}
-        <aside className={styles.sidebar}>
+        <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
+          <button
+            type="button"
+            className={styles.sidebarToggle}
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? "›" : "‹"}
+          </button>
+          {!sidebarCollapsed && (
+            <>
           {/* Polymarket Section */}
           <div className={styles.section}>
             <div className={styles.cardTitle}>POLYMARKET</div>
@@ -768,6 +779,8 @@ export default function Dashboard({ interval = 15 }: DashboardProps) {
               />
             </div>
           </div>
+            </>
+          )}
         </aside>
 
         {error && <div className={styles.errorToast}>Error: {error}</div>}

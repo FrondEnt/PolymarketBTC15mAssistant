@@ -1,27 +1,26 @@
 .container {
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   background: #0a0a10;
   font-family: 'JetBrains Mono', monospace;
   color: #fff;
-  overflow: hidden;
 }
 
 .inner {
   display: flex;
   flex: 1;
-  overflow: hidden;
   width: 100%;
+  min-height: 0;
 }
 
 .mainContent {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   border-right: 1px solid #161622;
   padding: 0 24px 24px 24px;
+  min-height: 0;
 }
 
 .sidebar {
@@ -31,6 +30,45 @@
   overflow-y: auto;
   background: #0d0d16;
   flex-shrink: 0;
+  position: relative;
+  transition: width 0.2s ease;
+}
+
+.sidebarCollapsed {
+  width: 44px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.sidebarToggle {
+  position: absolute;
+  top: 12px;
+  right: 8px;
+  z-index: 10;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #2a2a3a;
+  border-radius: 4px;
+  background: #11111e;
+  color: #888;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebarCollapsed .sidebarToggle {
+  right: 50%;
+  transform: translateX(50%);
+  top: 16px;
+}
+
+.sidebarToggle:hover {
+  color: #fff;
+  border-color: #4ade80;
 }
 
 .section {
@@ -61,15 +99,31 @@
 
 .btcTitle {
   color: #f7931a;
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.5px;
 }
 
 .polyTitle {
   color: #4ade80;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 600;
+}
+
+.polyValues {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.polyUp {
+  color: #4ade80;
+}
+
+.polyDown {
+  color: #f87171;
 }
 
 .pointCounter {
@@ -143,6 +197,7 @@
 .chartWrapper {
   flex: 1;
   width: 100%;
+  min-height: 400px;
   background: #0d0d16;
   border: 1px solid #161622;
   border-radius: 8px;
@@ -150,15 +205,6 @@
   margin-bottom: 6px;
   user-select: none;
   position: relative;
-  min-height: 0;
-}
-
-.chartDragging {
-  cursor: grabbing;
-}
-
-.chartNormal {
-  cursor: crosshair;
 }
 
 .noData {
@@ -195,7 +241,7 @@
 }
 
 .cardTitle {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   color: #fff;
   margin-bottom: 12px;

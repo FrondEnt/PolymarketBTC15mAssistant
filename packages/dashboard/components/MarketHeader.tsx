@@ -74,12 +74,12 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
       <div className={styles.rightSection}>
         <div className={styles.timer}>
           <div className={styles.timerUnit}>
-            <span className={styles.timerValue}>{mins}</span>
             <span className={styles.timerLabel}>MINS</span>
+            <span className={styles.timerValue}>{mins}</span>
           </div>
           <div className={styles.timerUnit}>
-            <span className={styles.timerValue}>{secs}</span>
             <span className={styles.timerLabel}>SECS</span>
+            <span className={styles.timerValue}>{secs}</span>
           </div>
         </div>
       </div>

@@ -36,7 +36,7 @@
 }
 
 .title {
-  font-size: 32px;
+  font-size: 22px;
   font-weight: 700;
   margin: 0;
   color: #fff;
@@ -71,7 +71,7 @@
 }
 
 .statValue {
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 700;
   color: #fff;
 }
@@ -123,7 +123,7 @@
 }
 
 .timerValue {
-  font-size: 36px;
+  font-size: 28px;
   font-weight: 700;
   color: #f87171;
   line-height: 1;
@@ -133,7 +133,7 @@
   font-size: 9px;
   font-weight: 700;
   color: #50506a;
-  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
 .actions {
