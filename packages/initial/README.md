@@ -1,4 +1,4 @@
-# Polymarket BTC 15m Assistant
+# Polymarket BTC Assistant
 
 A real-time console trading assistant for Polymarket **"Bitcoin Up or Down" 15-minute** markets.
 
